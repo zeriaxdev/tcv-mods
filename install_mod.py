@@ -55,14 +55,14 @@ EXPORT_PRESET = "Windows Desktop"
 OUTPUT_STEM = "TheChoicerVoicer-Multiplayer"
 
 KOFI_URL = "https://ko-fi.com/appolodev"
-ISSUES_URL = "https://github.com/TypeOneAppolo/tcv-multiplayer-mod/issues"
+ISSUES_URL = "https://github.com/zeriaxdev/tcv-multiplayer/issues"
 
 RUN_LOG_DIR = HERE / "install_logs"
 
 NODE_PATH_RE = re.compile(r'(\$%?[A-Za-z_]\w*)((?:\s*/\s*%?[A-Za-z_]\w*)+)')
 
 AUTOLOAD_ANCHOR = 'Metro="*res://common/globals/metro.gd"'
-AUTOLOAD_LINE = 'Net="*res://net/net_manager.gd"'
+AUTOLOAD_LINE = 'CommunityPacks="*res://net/community_pack_service.gd"\nNet="*res://net/net_manager.gd"'
 
 LOG_ANCHOR = "settings/stdout/verbose_stdout=true"
 LOG_LINES = ['file_logging/enable_file_logging=true',
@@ -989,8 +989,7 @@ def main(argv: list[str]) -> int:
     print(f"\nDone -> {output.resolve()}  ({size // 1048576} MB)")
     print("Launch it, press F9 on the main menu to open the online lobby.")
     print("Everyone you play with needs to build this same version themselves.")
-    if not args.no_kofi:
-        open_the_kofi()
+    print("Original multiplayer/installer: TypeOneAppolo. Native menu fork: zeriaxdev.")
     return 0
 
 

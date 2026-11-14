@@ -20,15 +20,7 @@ const SEARCH_FIELDS: String = "name,description,owner,credits"
 var _http: HTTPRequest
 var _request_kind: String = ""
 var _request_page: int = 1
-
-
-func _ready() -> void:
-	_http = HTTPRequest.new()
-	_http.use_threads = true
-	_http.timeout = 15.0
-	_http.body_size_limit = API_BODY_LIMIT
-	_http.request_completed.connect(_on_request_completed)
-	add_child(_http)
+var _request_serial: int = 0
 
 
 func is_busy() -> bool:
@@ -36,7 +28,11 @@ func is_busy() -> bool:
 
 
 func cancel() -> void:
-	if is_busy(): _http.cancel_request()
+	_request_serial += 1
+	if is_instance_valid(_http):
+		_http.cancel_request()
+		_http.queue_free()
+		_http = null
 	_request_kind = ""
 
 
@@ -87,22 +83,35 @@ func fetch_detail(mod_id: int, force: bool = false) -> void:
 
 
 func _start(url: String, force: bool) -> void:
+	_request_serial += 1
+	_http = HTTPRequest.new()
+	_http.use_threads = true
+	_http.timeout = 15.0
+	_http.body_size_limit = API_BODY_LIMIT
+	_http.request_completed.connect(_on_request_completed.bind(_request_serial))
+	add_child(_http)
 	var headers: PackedStringArray = [
 		"Accept: application/json",
-		"User-Agent: TCV-Multiplayer/%s" % str(Net.MOD_VERSION),
+		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
 	]
 	if force: headers.append("Cache-Control: no-cache")
 	var error: Error = _http.request(url, headers)
 	if error != OK:
 		_request_kind = ""
+		_http.queue_free()
+		_http = null
 		request_failed.emit("Could not start the GameBanana request (%s)." % error_string(error))
 
 
 func _on_request_completed(
-	result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray
+	result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, serial: int = -1
 ) -> void:
+	if _request_kind.is_empty() or (serial >= 0 and serial != _request_serial): return
 	var kind: String = _request_kind
 	_request_kind = ""
+	if is_instance_valid(_http):
+		_http.queue_free()
+		_http = null
 	if result != HTTPRequest.RESULT_SUCCESS:
 		request_failed.emit("GameBanana request failed (%d)." % result)
 		return

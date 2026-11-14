@@ -36,3 +36,14 @@ func _input(event: InputEvent) -> void:
  if has_focus() and enabled and event.is_action_pressed("ui_accept"):
   get_viewport().set_input_as_handled()
   click()
+
+func use_small() -> void:
+ var source: Control = load("res://scene/module/button/button_cv_small.tscn").instantiate()
+ material = source.material.duplicate()
+ source.free()
+ button_type = BUTTONTYPE.SMALL
+ caption.add_theme_font_override("font", load("res://graphic/font/DuruSans-Regular.ttf"))
+ caption.add_theme_font_size_override("font_size", 18)
+ custom_minimum_size.y = 44
+ text = text
+ if is_node_ready(): UpdatePalette()

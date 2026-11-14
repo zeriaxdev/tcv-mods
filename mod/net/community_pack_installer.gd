@@ -84,7 +84,7 @@ func install(mod: Dictionary, file: Dictionary) -> void:
 	progress.emit(0, int(file.get("size", 0)), "Connecting to GameBanana...")
 	var headers: PackedStringArray = [
 		"Accept: application/octet-stream",
-		"User-Agent: TCV-Multiplayer/%s" % str(Net.MOD_VERSION),
+		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
 	]
 	var error: Error = _http.request(str(file["url"]), headers)
 	if error != OK:

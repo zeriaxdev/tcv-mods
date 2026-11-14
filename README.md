@@ -20,7 +20,7 @@ The browser and lobby are MenuBase pages loaded by the game's existing menu_mast
 
 These are Godot GDScript mods and small scene definitions, not a website or injected native machine code. The installer recovers an editable project from the supplied game, adds the Net autoload and patches game hooks, then exports it. The Mac adaptation similarly uses the recovered game data with a native Godot runtime; it does not use CrossOver. It is not the developer's original source repository.
 
-The UI fork keeps Appolo's multiplayer protocol and pack installer. It is one combined mod kit, not two independent drag-and-drop plugins.
+The UI fork keeps Appolo's multiplayer protocol and pack installer. This repository includes multiplayer and Community Packs together. The separate private `zeriaxdev/tcv-community-packs` repository runs the browser without multiplayer; `zeriaxdev/tcv-macos` builds either package locally.
 
 ## Credits and distribution
 
@@ -33,7 +33,7 @@ The MIT license permits modification/distribution of the mod while requiring its
 
 Action icons, including the supplied GameBanana SVG, are omitted from this revision. No logo artwork is distributed in this kit. Installed packs and downloads use the same native list/detail page as browsing; their former card popups are removed. The inherited Discord/support UI is removed, so this fork does not send users to Appolo for support.
 
-Keep any GitHub repository **private** for now. No GitHub repository has been created or uploaded by this packaging step. Before a public release, confirm the game's modding/reconstruction policy with the developer; this kit is not a legal clearance for the game or community pack content.
+Keep any GitHub repository **private** for now. The source repositories are private under zeriaxdev. Before a public release, confirm the game's modding/reconstruction policy with the developer; this kit is not a legal clearance for the game or community pack content.
 
 ## Source map
 
@@ -44,3 +44,7 @@ Keep any GitHub repository **private** for now. No GitHub repository has been cr
 - `mod/net/net_manager.gd` and `mod/patches/`: navigation and game hooks.
 
 See UPSTREAM_README.md for the original installation details, troubleshooting, features and author links. Credits there describe the upstream mod, not ownership by this fork.
+
+## Validation
+
+Regression scripts under `tests/` run locally with Godot 4.4.1 against your own recovered/patched project, for example `Godot --headless --path /your/local/project --script /path/to/tests/repro_catalog.gd`. They test cancellation, selection and native navigation; no paid game is uploaded to CI.

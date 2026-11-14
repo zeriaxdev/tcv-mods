@@ -16,9 +16,9 @@ const BORDER: Color = Color("a4c8ce")
 const TEXT: Color = Color("17383e")
 const MUTED: Color = Color("5c7d82")
 const ACCENT: Color = Color("9fd5df")
-const WARNING: Color = Color("915915")
-const SUCCESS: Color = Color("287d65")
-const DANGER: Color = Color("a83d48")
+const WARNING: Color = Color("ffe09c")
+const SUCCESS: Color = Color("a6e4be")
+const DANGER: Color = Color("ff9aa6")
 
 var _catalog: Node
 var _downloads: Node
@@ -60,6 +60,7 @@ var _pending_uninstall: Dictionary = {}
 var _detail_content: VBoxContainer
 var _detail_actions: HBoxContainer
 var _view_mode: String = "browse"
+var _nav_tabs: ButtonArray
 var _search_tools: Control
 var _paging: Control
 var _mode_actions: HBoxContainer
@@ -78,7 +79,7 @@ func _ready() -> void:
 	_catalog.detail_loaded.connect(_on_detail_loaded)
 	_catalog.request_failed.connect(_on_request_failed)
 	add_child(_catalog)
-	_downloads = Net.community_pack_downloads
+	_downloads = CommunityPacks.downloads
 	_downloads.changed.connect(_on_downloads_changed)
 	_image_http = HTTPRequest.new()
 	_image_http.use_threads = true
@@ -126,15 +127,23 @@ func _build_ui() -> void:
 	navigation.custom_minimum_size.x = 168
 	navigation.add_theme_constant_override("separation", 12)
 	workspace.add_child(navigation)
+	_nav_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
+	_nav_tabs.large_buttons = false
+	_nav_tabs.columns = 1
+	_nav_tabs.add_theme_constant_override("v_separation", 12)
 	var browse := _button("Browse packs", false)
 	browse.pressed.connect(_show_browse)
-	navigation.add_child(browse)
+	browse.use_small()
+	_nav_tabs.add_child(browse)
 	_installed_button = _button("Installed packs", false)
 	_installed_button.pressed.connect(_show_installed)
-	navigation.add_child(_installed_button)
+	_installed_button.use_small()
+	_nav_tabs.add_child(_installed_button)
 	_downloads_button = _button("Downloads", false)
 	_downloads_button.pressed.connect(_show_downloads)
-	navigation.add_child(_downloads_button)
+	_downloads_button.use_small()
+	_nav_tabs.add_child(_downloads_button)
+	navigation.add_child(_nav_tabs)
 	_online_downloads_box = CheckBox.new()
 	_online_downloads_box.text = "Download online"
 	_online_downloads_box.tooltip_text = "Allow new downloads during online multiplayer."
@@ -212,6 +221,8 @@ func _build_ui() -> void:
 	for property: String in native_properties:
 		if property.begins_with("theme_override") or property in ["allow_reselect", "auto_tooltip"]:
 			_list.set(property, native_properties[property])
+	_list.add_theme_stylebox_override("selected", _selection_box())
+	_list.add_theme_stylebox_override("selected_focus", _selection_box())
 	_list.hide_root = true
 	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -352,7 +363,9 @@ func _build_ui() -> void:
 
 
 func _load_page(force: bool = false) -> void:
-	if not is_instance_valid(_catalog) or _catalog.is_busy(): return
+	if not is_instance_valid(_catalog): return
+	_catalog.cancel()
+	_clear_detail()
 	_loading_detail = false
 	_set_list_busy(true)
 	_records.clear()
@@ -407,8 +420,9 @@ func _render_list() -> void:
 
 
 func _select_record(record: Dictionary) -> void:
-	if _catalog.is_busy(): return
+	_catalog.cancel()
 	_loading_detail = true
+	_file_picker.show()
 	_detail_content.visible = true
 	_detail_actions.visible = true
 	_selected = record.duplicate(true)
@@ -416,7 +430,7 @@ func _select_record(record: Dictionary) -> void:
 	_preview.texture = null
 	_preview_placeholder.visible = true
 	_detail_title.text = str(record.get("name", "Dub pack"))
-	_detail_meta.text = "by %s  •  Loading details..." % str(record.get("author", "Unknown creator"))
+	_detail_meta.text = "by %s" % str(record.get("author", "Unknown creator"))
 	_detail_description.text = "Loading description and download files..."
 	_file_picker.clear()
 	_file_picker.disabled = true
@@ -482,7 +496,7 @@ func _refresh_install_action() -> void:
 	var mod_id: int = int(_detail.get("id", 0))
 	var installed: String = INSTALLER_SCRIPT.installed_path(mod_id)
 	_uninstall_button.visible = not installed.is_empty()
-	_uninstall_button.disabled = Net.is_online() or _mod_has_active_job(mod_id)
+	_uninstall_button.disabled = CommunityPacks.is_online() or _mod_has_active_job(mod_id)
 	if not installed.is_empty():
 		_install_button.text = "Installed"
 		_install_button.disabled = true
@@ -509,7 +523,7 @@ func _refresh_install_action() -> void:
 		_install_progress.value = clampi(
 			int(job.get("received", 0)), 0, int(_install_progress.max_value))
 		var status: String = str(job.get("status", "Queued"))
-		if state == "queued" and Net.is_online() and not _downloads.allow_online_downloads():
+		if state == "queued" and CommunityPacks.is_online() and not _downloads.allow_online_downloads():
 			status = "Queued — waiting until you leave online multiplayer."
 		_install_status.text = status
 		_install_status.add_theme_color_override("font_color", Color("cccccc"))
@@ -530,10 +544,10 @@ func _refresh_install_action() -> void:
 	if not problem.is_empty():
 		_install_status.text = problem
 		_install_status.add_theme_color_override("font_color", DANGER)
-	elif Net.is_online() and not _downloads.allow_online_downloads():
+	elif CommunityPacks.is_online() and not _downloads.allow_online_downloads():
 		_install_status.text = "This will wait in the queue until you leave online multiplayer."
 		_install_status.add_theme_color_override("font_color", WARNING)
-	elif Net.is_online():
+	elif CommunityPacks.is_online():
 		_install_status.text = "Ready to queue online. Large downloads may increase multiplayer latency."
 		_install_status.add_theme_color_override("font_color", WARNING)
 	else:
@@ -578,7 +592,7 @@ func _update_selected_active_download() -> bool:
 	_install_progress.max_value = maxi(1, int(job.get("total", file.get("size", 0))))
 	_install_progress.value = clampi(int(job.get("received", 0)), 0, int(_install_progress.max_value))
 	_install_status.text = str(job.get("status", "Queued"))
-	if state == "queued" and Net.is_online() and not _downloads.allow_online_downloads():
+	if state == "queued" and CommunityPacks.is_online() and not _downloads.allow_online_downloads():
 		_install_status.text = "Queued — waiting until you leave online multiplayer."
 	_install_status.add_theme_color_override("font_color", Color("cccccc"))
 	return true
@@ -589,6 +603,7 @@ func _set_view(mode: String) -> void:
 	_image_http.cancel_request()
 	_loading_detail = false
 	_view_mode = mode
+	_nav_tabs.select_item(["browse", "installed", "downloads"].find(mode))
 	_search_tools.visible = mode == "browse"
 	_paging.visible = mode == "browse"
 	_sort.visible = mode == "browse"
@@ -662,9 +677,9 @@ func _show_installed_detail(pack: Dictionary) -> void:
 	_detail_title.text = str(pack.get("name", "Dub pack"))
 	_detail_meta.text = "by %s • %s" % [pack.get("author", "Unknown"), _format_bytes(int(pack.get("installed_bytes", 0)))]
 	_detail_description.text = "Folder: %s" % pack.get("folder", "")
-	_install_status.text = "Leave online play before uninstalling." if Net.is_online() else ""
+	_install_status.text = "Leave online play before uninstalling." if CommunityPacks.is_online() else ""
 	_uninstall_button.show()
-	_uninstall_button.disabled = Net.is_online() or _mod_has_active_job(int(pack.get("mod_id", 0)))
+	_uninstall_button.disabled = CommunityPacks.is_online() or _mod_has_active_job(int(pack.get("mod_id", 0)))
 	_open_button.disabled = not str(pack.get("profile_url", "")).begins_with("https://gamebanana.com/")
 
 
@@ -744,7 +759,7 @@ func _open_gamebanana(url: String) -> void:
 
 func _on_uninstall_pressed() -> void:
 	var mod_id: int = int(_detail.get("id", 0))
-	if mod_id <= 0 or Net.is_online() or _mod_has_active_job(mod_id): return
+	if mod_id <= 0 or CommunityPacks.is_online() or _mod_has_active_job(mod_id): return
 	_request_uninstall({
 		"mod_id": mod_id,
 		"name": str(_detail.get("name", "Dub pack")),
@@ -754,7 +769,7 @@ func _on_uninstall_pressed() -> void:
 
 func _request_uninstall(pack: Dictionary) -> void:
 	var mod_id: int = int(pack.get("mod_id", 0))
-	if mod_id <= 0 or Net.is_online() or _mod_has_active_job(mod_id): return
+	if mod_id <= 0 or CommunityPacks.is_online() or _mod_has_active_job(mod_id): return
 	_pending_uninstall = pack.duplicate(true)
 	_uninstall_dialog.dialog_text = ("Remove '%s' and all files this installer placed in its pack folder?\n\n"
 		+ "Manually installed packs are never removed by this button.") % str(
@@ -766,7 +781,7 @@ func _confirm_uninstall() -> void:
 	var pack: Dictionary = _pending_uninstall.duplicate(true)
 	_pending_uninstall.clear()
 	var mod_id: int = int(pack.get("mod_id", 0))
-	if mod_id <= 0 or Net.is_online() or _mod_has_active_job(mod_id): return
+	if mod_id <= 0 or CommunityPacks.is_online() or _mod_has_active_job(mod_id): return
 	var result: Dictionary = INSTALLER_SCRIPT.uninstall(mod_id, str(pack.get("path", "")))
 	if result.has("error"):
 		var message: String = str(result["error"])
@@ -775,7 +790,7 @@ func _confirm_uninstall() -> void:
 			_install_status.add_theme_color_override("font_color", DANGER)
 		return
 	_downloads.dismiss_for_mod(mod_id)
-	Net.community_pack_library_changed()
+	CommunityPacks.community_pack_library_changed()
 	if int(_detail.get("id", 0)) == mod_id:
 		_refresh_install_action()
 		_install_status.text = "Uninstalled %s." % str(pack.get("name", "community pack"))
@@ -787,9 +802,11 @@ func _confirm_uninstall() -> void:
 
 
 func _on_request_failed(message: String) -> void:
+	if _view_mode != "browse": return
 	_set_list_busy(false)
 	if _loading_detail:
 		_loading_detail = false
+		_file_picker.hide()
 		_detail_description.text = message
 		_install_status.text = "You can still open the submission on GameBanana."
 		_install_status.add_theme_color_override("font_color", DANGER)
@@ -805,7 +822,7 @@ func _load_preview(url: String) -> void:
 		return
 	_preview_placeholder.text = "LOADING PREVIEW..."
 	var error: Error = _image_http.request(
-		url, ["User-Agent: TCV-Multiplayer/%s" % str(Net.MOD_VERSION)])
+		url, ["User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION)])
 	if error != OK: _preview_placeholder.text = "PREVIEW UNAVAILABLE"
 
 
@@ -865,3 +882,17 @@ static func _compact_text(value: String, limit: int) -> String:
 	# there, while still putting most of the useful title at the front.
 	var tail: int = mini(14, limit / 4)
 	return value.left(limit - tail - 1) + "…" + value.right(tail)
+
+func _clear_detail() -> void:
+	_selected.clear()
+	_detail.clear()
+	_image_http.cancel_request()
+	_detail_content.hide()
+	_detail_actions.hide()
+	_install_progress.hide()
+	_install_status.text = ""
+
+static func _selection_box() -> StyleBox:
+	var properties := STYLE.scene_properties("res://scene/menu/customize/menu_customize.tscn", "Border/Main/PackListings/List/MarginContainer/VoicePackTree")
+	var native_theme: Theme = properties["theme"]
+	return native_theme.get_stylebox("selected_focus", "Tree")

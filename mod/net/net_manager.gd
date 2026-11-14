@@ -1653,19 +1653,7 @@ func open_lobby() -> void:
 
 
 func open_community_packs() -> void:
-	if not get_tree().root.has_node("World"): return
-	for menu: Node in M.world.primary_capsule.get_children():
-		if not menu.scene_file_path.contains("menu_master"): continue
-		var slides: Node = menu.get_node("SlideCapsule")
-		var previous: String = slides.get_child(0).scene_file_path if slides.get_child_count() else "res://scene/menu/home/menu_home.tscn"
-		if previous.ends_with("community_pack_browser.tscn"): return
-		menu.NewSlide("res://net/community_pack_browser.tscn", false)
-		var page: Node = slides.get_child(-1)
-		page.menu_data = page.menu_data.duplicate()
-		page.menu_data.back_path = previous
-		page.menu_data.assume_path = false
-		page.closed.connect(menu.new_slide_from_data)
-		return
+	CommunityPacks.open_browser()
 
 
 func community_pack_library_changed() -> void:
@@ -1734,10 +1722,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _ready() -> void:
-	community_pack_downloads = preload("res://net/community_pack_queue.gd").new()
-	community_pack_downloads.name = "CommunityPackDownloads"
-	add_child(community_pack_downloads)
-	community_pack_downloads.configure(self)
+	community_pack_downloads = CommunityPacks.downloads
 	pack_sync = preload("res://net/pack_sync.gd").new()
 	pack_sync.name = "PackSync"
 	add_child(pack_sync)

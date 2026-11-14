@@ -14,10 +14,15 @@ var host_button: GAME_BUTTON
 var join_button: GAME_BUTTON
 var start_button: GAME_BUTTON
 var dub_button: GAME_BUTTON
-var ready_button: CheckBox
+var ready_button: CheckButton
 var status_label: Label
 var warning_label: Label
 var player_rows: VBoxContainer
+var _tabs: ButtonArray
+var _connection_body: VBoxContainer
+var _roster_body: VBoxContainer
+var _tab_title: Label
+var _was_online := false
 
 
 func _ready() -> void:
@@ -44,94 +49,113 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-
-	var margin: = MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 58 if side in ["top", "bottom"] else 16)
 	add_child(margin)
-
-	var column: = VBoxContainer.new()
-	column.add_theme_constant_override("separation", 10)
-	margin.add_child(column)
-
-	# "check you are on the same version" is no use if the version is nowhere.
-	var build: = Label.new()
-	build.text = "Multiplayer mod %s, protocol %d. Everyone has to be on the same protocol number." % [
-		Net.MOD_VERSION, Net.PROTOCOL_VERSION]
-	build.add_theme_font_size_override("font_size", 14)
-	build.add_theme_color_override("font_color", Color("557c82"))
-	column.add_child(build)
-
+	var workspace := HBoxContainer.new()
+	workspace.add_theme_constant_override("separation", 16)
+	margin.add_child(workspace)
+	_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
+	_tabs.large_buttons = false
+	_tabs.columns = 1
+	_tabs.custom_minimum_size.x = 224
+	_tabs.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_tabs.add_theme_constant_override("v_separation", 12)
+	for text: String in ["Connection", "Contestants"]:
+		var tab := GAME_BUTTON.new()
+		tab.text = text
+		tab.use_small()
+		_tabs.add_child(tab)
+	_tabs.selection.connect(_show_tab)
+	workspace.add_child(_tabs)
 	var panel := PanelContainer.new()
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(panel)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	workspace.add_child(panel)
 	STYLE.dark_panel(panel)
 	var inset := MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
 		inset.add_theme_constant_override("margin_" + side, 24)
 	panel.add_child(inset)
 	var body := VBoxContainer.new()
-	body.add_theme_constant_override("separation", 12)
+	body.add_theme_constant_override("separation", 16)
 	body.theme = STYLE.make_theme()
 	body.theme.set_color("font_color", "Label", Color.WHITE)
 	inset.add_child(body)
-	column = body
-
+	_tab_title = Label.new()
+	_tab_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_child(_tab_title)
+	body.add_child(HSeparator.new())
+	_connection_body = VBoxContainer.new()
+	_connection_body.add_theme_constant_override("separation", 16)
+	body.add_child(_connection_body)
 	var default_name: String = OS.get_environment("USERNAME")
+	if default_name.is_empty(): default_name = OS.get_environment("USER")
 	if default_name.is_empty(): default_name = "Player"
-	name_field = _labeled_field(column, "Your name", default_name)
-	address_field = _labeled_field(column, "Host address", "127.0.0.1")
-	port_field = _labeled_field(column, "Port", str(Net.PORT))
-
-	var buttons: = HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
-	column.add_child(buttons)
-
+	name_field = _labeled_field(_connection_body, "Your name", default_name)
+	address_field = _labeled_field(_connection_body, "Host address", "127.0.0.1")
+	port_field = _labeled_field(_connection_body, "Port", str(Net.PORT))
+	var connection_actions := HBoxContainer.new()
+	connection_actions.add_theme_constant_override("separation", 12)
+	_connection_body.add_child(connection_actions)
 	host_button = GAME_BUTTON.new()
 	host_button.text = "Host"
 	host_button.pressed.connect(_on_host)
-	buttons.add_child(host_button)
-
+	connection_actions.add_child(host_button)
 	join_button = GAME_BUTTON.new()
 	join_button.text = "Join"
 	join_button.pressed.connect(_on_join)
-	buttons.add_child(join_button)
-
-	ready_button = CheckBox.new()
-	ready_button.text = "Ready"
-	ready_button.toggled.connect(func(v: bool) -> void: Net.set_ready(v))
-	buttons.add_child(ready_button)
-
-	start_button = GAME_BUTTON.new()
-	start_button.text = "Start (choose clips)"
-	start_button.pressed.connect(_on_start)
-	buttons.add_child(start_button)
-
-	dub_button = GAME_BUTTON.new()
-	dub_button.text = "Start (dub mode)"
-	dub_button.pressed.connect(_on_start_dub)
-	buttons.add_child(dub_button)
-
-	status_label = Label.new()
-	status_label.text = "Not connected."
-	column.add_child(status_label)
-
-	warning_label = Label.new()
-	warning_label.add_theme_color_override("font_color", Color("9b5b09"))
-	warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	column.add_child(warning_label)
-
-	var players_title: = Label.new()
-	players_title.text = "Contestants"
-	players_title.add_theme_font_size_override("font_size", 22)
-	column.add_child(players_title)
-
+	connection_actions.add_child(join_button)
+	_roster_body = VBoxContainer.new()
+	_roster_body.add_theme_constant_override("separation", 16)
+	body.add_child(_roster_body)
 	player_rows = VBoxContainer.new()
 	player_rows.custom_minimum_size.y = ROW_HEIGHT * Net.MAX_PLAYERS
-	column.add_child(player_rows)
+	_roster_body.add_child(player_rows)
+	ready_button = CheckButton.new()
+	ready_button.text = "Ready"
+	for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		ready_button.add_theme_color_override(state, Color.WHITE)
+	ready_button.toggled.connect(func(on: bool): Net.set_ready(on))
+	_roster_body.add_child(ready_button)
+	var play_actions := HBoxContainer.new()
+	play_actions.add_theme_constant_override("separation", 12)
+	_roster_body.add_child(play_actions)
+	start_button = GAME_BUTTON.new()
+	start_button.text = "Gameshow"
+	start_button.pressed.connect(_on_start)
+	play_actions.add_child(start_button)
+	dub_button = GAME_BUTTON.new()
+	dub_button.text = "Dub Mode"
+	dub_button.pressed.connect(_on_start_dub)
+	play_actions.add_child(dub_button)
+	status_label = Label.new()
+	status_label.text = "Not connected."
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(status_label)
+	warning_label = Label.new()
+	warning_label.add_theme_color_override("font_color", Color("ffe09c"))
+	warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(warning_label)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(spacer)
+	var build := Label.new()
+	build.text = "Multiplayer %s • Protocol %d" % [Net.MOD_VERSION, Net.PROTOCOL_VERSION]
+	build.add_theme_font_size_override("font_size", 14)
+	build.add_theme_color_override("font_color", Color("cccccc"))
+	build.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	body.add_child(build)
+	_show_tab(0)
 
-	# Credits remain in the mod documentation; keep this screen focused on joining.
+
+func _show_tab(index: int) -> void:
+	_tabs.select_item(index)
+	_tab_title.text = "Connection" if index == 0 else "Contestants"
+	_connection_body.visible = index == 0
+	_roster_body.visible = index == 1
 
 
 func _labeled_field(parent: Control, label_text: String, default_value: String) -> LineEdit:
@@ -146,7 +170,8 @@ func _labeled_field(parent: Control, label_text: String, default_value: String) 
 
 	var field: = LineEdit.new()
 	field.text = default_value
-	field.custom_minimum_size.x = 320
+	field.custom_minimum_size.x = 240
+	field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(field)
 	return field
 
@@ -235,6 +260,8 @@ func _refresh() -> void:
 	Net.log_net("lobby refresh: %d player(s)" % Net.players.size())
 
 	var online: bool = Net.is_online()
+	if online and not _was_online: _show_tab(1)
+	_was_online = online
 	host_button.disabled = online
 	join_button.disabled = online
 	name_field.editable = not online
