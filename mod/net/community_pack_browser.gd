@@ -34,7 +34,7 @@ var _loading_detail: bool = false
 
 var _search: LineEdit
 var _sort: OptionButton
-var _rated: CheckBox
+var _rated: CheckButton
 var _page_label: Label
 var _list_status: Label
 var _list: Tree
@@ -54,7 +54,7 @@ var _uninstall_button: GAME_BUTTON
 var _open_button: GAME_BUTTON
 var _installed_button: GAME_BUTTON
 var _downloads_button: GAME_BUTTON
-var _online_downloads_box: CheckBox
+var _online_downloads_box: CheckButton
 var _uninstall_dialog: ConfirmationDialog
 var _pending_uninstall: Dictionary = {}
 var _detail_content: VBoxContainer
@@ -144,7 +144,7 @@ func _build_ui() -> void:
 	_downloads_button.use_small()
 	_nav_tabs.add_child(_downloads_button)
 	navigation.add_child(_nav_tabs)
-	_online_downloads_box = CheckBox.new()
+	_online_downloads_box = CheckButton.new()
 	_online_downloads_box.text = "Download online"
 	_online_downloads_box.tooltip_text = "Allow new downloads during online multiplayer."
 	_online_downloads_box.visible = false
@@ -187,7 +187,7 @@ func _build_ui() -> void:
 		_page = 1
 		_load_page())
 	navigation.add_child(_sort)
-	_rated = CheckBox.new()
+	_rated = CheckButton.new()
 	_rated.text = "Content-rated"
 	_rated.tooltip_text = "Content-rated packs are hidden by default."
 	_rated.toggled.connect(func(_on: bool) -> void: _render_list())

@@ -17,7 +17,7 @@ static func make_theme() -> Theme:
  t.default_font = load("res://graphic/font/DuruSans-Regular.ttf")
  t.default_font_size = 18
  var ink := Color.BLACK
- for kind: String in ["Label", "Button", "LineEdit", "OptionButton", "CheckBox"]:
+ for kind: String in ["Label", "Button", "LineEdit", "OptionButton", "CheckBox", "CheckButton"]:
   t.set_color("font_color", kind, ink)
   t.set_color("font_hover_color", kind, ink)
   t.set_color("font_pressed_color", kind, ink)
