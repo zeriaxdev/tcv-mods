@@ -1,35 +1,30 @@
-extends Control
+extends MenuBase
+
+const GAME_BUTTON = preload("res://net/choicer_button.gd")
+const STYLE = preload("res://net/choicer_style.gd")
 
 const ROW_HEIGHT: int = 34
 # ENet drops a peer it cannot reach after 30s of its own accord. say something
 # useful before that happens rather than letting the lobby sit there empty.
 const JOIN_TIMEOUT: float = 12.0
-const KOFI_URL: String = "https://ko-fi.com/appolodev"
-const GAMEBANANA_URL: String = "https://gamebanana.com/mods/702231"
-const DISCORD_URL: String = "https://discord.gg/HYhh6V4NZk"
-const SUPPORT_INSET: Vector2 = Vector2(48, 32)
-# Discord's own. the button is the one thing on this screen someone reaches for
-# when the rest of it isn't working, so let it stand out from the two links next
-# to it that are only ever asking them for something.
-const DISCORD_COLOR: Color = Color("5865f2")
-
 var name_field: LineEdit
 var address_field: LineEdit
 var port_field: LineEdit
-var host_button: Button
-var join_button: Button
-var start_button: Button
-var dub_button: Button
+var host_button: GAME_BUTTON
+var join_button: GAME_BUTTON
+var start_button: GAME_BUTTON
+var dub_button: GAME_BUTTON
 var ready_button: CheckBox
-var leave_button: Button
 var status_label: Label
 var warning_label: Label
 var player_rows: VBoxContainer
-var support_box: VBoxContainer
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	position = Vector2.ZERO
+	size = get_viewport_rect().size
+	theme = STYLE.make_theme()
 	_build_ui()
 	# deferred: these fire from inside the multiplayer poll, and rebuilding the
 	# player list there takes the engine down with no error to show for it.
@@ -41,6 +36,7 @@ func _ready() -> void:
 	Net.host_notice.connect(_on_host_notice, CONNECT_DEFERRED)
 	Net.server_disconnected.connect(func() -> void: _on_error(
 		"Lost the connection to the host. Either they closed the lobby, or the link between you dropped."))
+	add_to_group("OnBack")
 	_refresh()
 	if Net.is_online():
 		if Net.is_host(): _set_status("Lobby still open. Choose the next pack when everyone is ready.")
@@ -48,33 +44,39 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	var backdrop: = ColorRect.new()
-	backdrop.color = Color(0.05, 0.05, 0.09, 0.94)
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(backdrop)
 
 	var margin: = MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 64)
+		margin.add_theme_constant_override("margin_" + side, 58 if side in ["top", "bottom"] else 16)
 	add_child(margin)
 
 	var column: = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
 
-	var title: = Label.new()
-	title.text = "ONLINE MATCH"
-	title.add_theme_font_size_override("font_size", 32)
-	column.add_child(title)
-
 	# "check you are on the same version" is no use if the version is nowhere.
 	var build: = Label.new()
 	build.text = "Multiplayer mod %s, protocol %d. Everyone has to be on the same protocol number." % [
 		Net.MOD_VERSION, Net.PROTOCOL_VERSION]
 	build.add_theme_font_size_override("font_size", 14)
-	build.add_theme_color_override("font_color", Color(0.65, 0.65, 0.75))
+	build.add_theme_color_override("font_color", Color("557c82"))
 	column.add_child(build)
+
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(panel)
+	STYLE.dark_panel(panel)
+	var inset := MarginContainer.new()
+	for side: String in ["left", "right", "top", "bottom"]:
+		inset.add_theme_constant_override("margin_" + side, 24)
+	panel.add_child(inset)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	body.theme = STYLE.make_theme()
+	body.theme.set_color("font_color", "Label", Color.WHITE)
+	inset.add_child(body)
+	column = body
 
 	var default_name: String = OS.get_environment("USERNAME")
 	if default_name.is_empty(): default_name = "Player"
@@ -86,12 +88,12 @@ func _build_ui() -> void:
 	buttons.add_theme_constant_override("separation", 8)
 	column.add_child(buttons)
 
-	host_button = Button.new()
+	host_button = GAME_BUTTON.new()
 	host_button.text = "Host"
 	host_button.pressed.connect(_on_host)
 	buttons.add_child(host_button)
 
-	join_button = Button.new()
+	join_button = GAME_BUTTON.new()
 	join_button.text = "Join"
 	join_button.pressed.connect(_on_join)
 	buttons.add_child(join_button)
@@ -101,27 +103,22 @@ func _build_ui() -> void:
 	ready_button.toggled.connect(func(v: bool) -> void: Net.set_ready(v))
 	buttons.add_child(ready_button)
 
-	start_button = Button.new()
+	start_button = GAME_BUTTON.new()
 	start_button.text = "Start (choose clips)"
 	start_button.pressed.connect(_on_start)
 	buttons.add_child(start_button)
 
-	dub_button = Button.new()
+	dub_button = GAME_BUTTON.new()
 	dub_button.text = "Start (dub mode)"
 	dub_button.pressed.connect(_on_start_dub)
 	buttons.add_child(dub_button)
-
-	leave_button = Button.new()
-	leave_button.text = "Back"
-	leave_button.pressed.connect(_on_leave)
-	buttons.add_child(leave_button)
 
 	status_label = Label.new()
 	status_label.text = "Not connected."
 	column.add_child(status_label)
 
 	warning_label = Label.new()
-	warning_label.add_theme_color_override("font_color", Color("ffcc44"))
+	warning_label.add_theme_color_override("font_color", Color("9b5b09"))
 	warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(warning_label)
 
@@ -134,61 +131,7 @@ func _build_ui() -> void:
 	player_rows.custom_minimum_size.y = ROW_HEIGHT * Net.MAX_PLAYERS
 	column.add_child(player_rows)
 
-	_build_support_footer()
-
-
-# placed by hand off the viewport, not by anchors. world.gd hangs the lobby off
-# PrimaryCapsule, a plain Node, so the anchor preset never resolves and this
-# Control stays 0x0 -- anchor anything to the bottom and it lands top left.
-func _build_support_footer() -> void:
-	support_box = VBoxContainer.new()
-	support_box.add_theme_constant_override("separation", 6)
-	add_child(support_box)
-
-	var pitch: = Label.new()
-	pitch.text = ("Stuck, or short of people to play with? The Discord is where to ask."
-		+ "\nThis mod is free. If it got your group playing, please support me on Ko-fi, "
-		+ "or upvote it on GameBanana.")
-	pitch.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	pitch.add_theme_font_size_override("font_size", 14)
-	pitch.add_theme_color_override("font_color", Color(0.72, 0.72, 0.8))
-	support_box.add_child(pitch)
-
-	var links: = HBoxContainer.new()
-	links.alignment = BoxContainer.ALIGNMENT_END
-	links.add_theme_constant_override("separation", 8)
-	support_box.add_child(links)
-
-	var discord: Button = _link_button("Join the Discord", DISCORD_URL)
-	discord.add_theme_color_override("font_color", DISCORD_COLOR)
-	discord.add_theme_color_override("font_hover_color", DISCORD_COLOR.lightened(0.3))
-	links.add_child(discord)
-	var community: = Button.new()
-	community.text = "Browse community packs"
-	community.tooltip_text = "Open the in-game GameBanana Dub Mode browser."
-	community.pressed.connect(Net.open_community_packs)
-	links.add_child(community)
-	links.add_child(_link_button("Support me on Ko-fi", KOFI_URL))
-	links.add_child(_link_button("Upvote on GameBanana", GAMEBANANA_URL))
-
-	_place_support_box()
-	support_box.minimum_size_changed.connect(_place_support_box)
-	get_viewport().size_changed.connect(_place_support_box)
-	_place_support_box.call_deferred()
-
-
-func _place_support_box() -> void:
-	if not is_instance_valid(support_box): return
-	support_box.size = support_box.get_combined_minimum_size()
-	support_box.position = get_viewport_rect().size - support_box.size - SUPPORT_INSET
-
-
-func _link_button(text: String, url: String) -> Button:
-	var button: = Button.new()
-	button.text = text
-	button.tooltip_text = url
-	button.pressed.connect(func() -> void: OS.shell_open(url))
-	return button
+	# Credits remain in the mod documentation; keep this screen focused on joining.
 
 
 func _labeled_field(parent: Control, label_text: String, default_value: String) -> LineEdit:
@@ -252,9 +195,8 @@ func _watch_the_join() -> void:
 		address_field.text, int(JOIN_TIMEOUT), port_field.text])
 
 
-func _on_leave() -> void:
+func BackButtonPressed() -> void:
 	Net.leave()
-	M.world.CreateMenu()
 
 
 func _on_start() -> void:

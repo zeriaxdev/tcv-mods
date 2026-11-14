@@ -1,22 +1,24 @@
-extends Control
-# Native catalog UI. It is an overlay rather than a web view: only JSON, a
-# selected preview image and the chosen archive ever leave GameBanana.
+extends MenuBase
+
+const GAME_BUTTON = preload("res://net/choicer_button.gd")
+const STYLE = preload("res://net/choicer_style.gd")
+# MenuBase page; menu_master owns the background, breadcrumb and return bar.
 
 signal closed
 
 const CATALOG_SCRIPT: Script = preload("res://net/gamebanana_client.gd")
 const INSTALLER_SCRIPT: Script = preload("res://net/community_pack_installer.gd")
 
-const BG: Color = Color("080b14")
-const SURFACE: Color = Color("121827")
-const SURFACE_2: Color = Color("1a2234")
-const BORDER: Color = Color("34415d")
-const TEXT: Color = Color("f3f5fb")
-const MUTED: Color = Color("9ba7bd")
-const ACCENT: Color = Color("61c4ff")
-const WARNING: Color = Color("ffca58")
-const SUCCESS: Color = Color("63d69a")
-const DANGER: Color = Color("ff7b83")
+const BG: Color = Color("f5f8f8")
+const SURFACE: Color = Color("f8ffff")
+const SURFACE_2: Color = Color("e2f2f3")
+const BORDER: Color = Color("a4c8ce")
+const TEXT: Color = Color("17383e")
+const MUTED: Color = Color("5c7d82")
+const ACCENT: Color = Color("9fd5df")
+const WARNING: Color = Color("915915")
+const SUCCESS: Color = Color("287d65")
+const DANGER: Color = Color("a83d48")
 
 var _catalog: Node
 var _downloads: Node
@@ -35,9 +37,9 @@ var _sort: OptionButton
 var _rated: CheckBox
 var _page_label: Label
 var _list_status: Label
-var _list: VBoxContainer
-var _previous: Button
-var _next: Button
+var _list: Tree
+var _previous: GAME_BUTTON
+var _next: GAME_BUTTON
 
 var _preview: TextureRect
 var _preview_placeholder: Label
@@ -47,22 +49,21 @@ var _detail_description: Label
 var _file_picker: OptionButton
 var _install_status: Label
 var _install_progress: ProgressBar
-var _install_button: Button
-var _uninstall_button: Button
-var _open_button: Button
-var _installed_button: Button
-var _downloads_button: Button
-var _downloads_modal: Control
-var _downloads_list: VBoxContainer
-var _download_summary: Label
+var _install_button: GAME_BUTTON
+var _uninstall_button: GAME_BUTTON
+var _open_button: GAME_BUTTON
+var _installed_button: GAME_BUTTON
+var _downloads_button: GAME_BUTTON
 var _online_downloads_box: CheckBox
-var _downloads_note: Label
-var _installed_modal: Control
-var _installed_list: VBoxContainer
-var _installed_summary: Label
-var _installed_feedback: Label
 var _uninstall_dialog: ConfirmationDialog
 var _pending_uninstall: Dictionary = {}
+var _detail_content: VBoxContainer
+var _detail_actions: HBoxContainer
+var _view_mode: String = "browse"
+var _search_tools: Control
+var _paging: Control
+var _mode_actions: HBoxContainer
+var _selected_job: String = ""
 
 
 func _ready() -> void:
@@ -70,6 +71,7 @@ func _ready() -> void:
 	_fit_to_viewport()
 	get_viewport().size_changed.connect(_fit_to_viewport)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	theme = STYLE.make_theme()
 	_build_ui()
 	_catalog = CATALOG_SCRIPT.new()
 	_catalog.page_loaded.connect(_on_page_loaded)
@@ -101,68 +103,54 @@ func _exit_tree() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"): return
 	get_viewport().set_input_as_handled()
-	if is_instance_valid(_installed_modal) and _installed_modal.visible:
-		_installed_modal.visible = false
-	elif is_instance_valid(_downloads_modal) and _downloads_modal.visible:
-		_downloads_modal.visible = false
-	else:
-		closed.emit()
+	closed.emit()
 
 
 func _build_ui() -> void:
-	var backdrop: = ColorRect.new()
-	backdrop.color = BG
-	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(backdrop)
 
 	var margin: = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 28)
+		margin.add_theme_constant_override("margin_" + side, 58 if side in ["top", "bottom"] else 16)
 	add_child(margin)
 
 	var main: = VBoxContainer.new()
 	main.add_theme_constant_override("separation", 16)
 	margin.add_child(main)
 
-	var header: = HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	main.add_child(header)
-	var heading_box: = VBoxContainer.new()
-	heading_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(heading_box)
-	var heading: = Label.new()
-	heading.text = "COMMUNITY PACKS"
-	heading.add_theme_font_size_override("font_size", 30)
-	heading.add_theme_color_override("font_color", TEXT)
-	heading_box.add_child(heading)
-	var subheading: = Label.new()
-	subheading.text = "Browse and install Dub Mode packs without leaving the game"
-	subheading.add_theme_font_size_override("font_size", 14)
-	subheading.add_theme_color_override("font_color", MUTED)
-	heading_box.add_child(subheading)
-	var source: = Label.new()
-	source.text = "  GAMEBANANA  •  DUB MODE  "
-	source.add_theme_font_size_override("font_size", 13)
-	source.add_theme_color_override("font_color", ACCENT)
-	header.add_child(source)
-	_installed_button = _button("Installed", false)
-	_installed_button.tooltip_text = "View and uninstall community packs installed by this mod."
+	var workspace := HBoxContainer.new()
+	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	workspace.add_theme_constant_override("separation", 16)
+	main.add_child(workspace)
+	var navigation := VBoxContainer.new()
+	navigation.custom_minimum_size.x = 168
+	navigation.add_theme_constant_override("separation", 12)
+	workspace.add_child(navigation)
+	var browse := _button("Browse packs", false)
+	browse.pressed.connect(_show_browse)
+	navigation.add_child(browse)
+	_installed_button = _button("Installed packs", false)
 	_installed_button.pressed.connect(_show_installed)
-	header.add_child(_installed_button)
+	navigation.add_child(_installed_button)
 	_downloads_button = _button("Downloads", false)
 	_downloads_button.pressed.connect(_show_downloads)
-	header.add_child(_downloads_button)
-	var close: Button = _button("Close", false)
-	close.tooltip_text = "Downloads keep running after this screen closes."
-	close.pressed.connect(func() -> void: closed.emit())
-	header.add_child(close)
-
+	navigation.add_child(_downloads_button)
+	_online_downloads_box = CheckBox.new()
+	_online_downloads_box.text = "Download online"
+	_online_downloads_box.tooltip_text = "Allow new downloads during online multiplayer."
+	_online_downloads_box.visible = false
+	_online_downloads_box.toggled.connect(func(on: bool): _downloads.set_allow_online_downloads(on))
+	navigation.add_child(_online_downloads_box)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 12)
+	workspace.add_child(content)
 	var tools: = HBoxContainer.new()
+	_search_tools = tools
 	tools.add_theme_constant_override("separation", 10)
-	main.add_child(tools)
+	content.add_child(tools)
 	_search = LineEdit.new()
-	_search.placeholder_text = "Search dub packs, creators or descriptions..."
+	_search.placeholder_text = "Search packs"
 	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search.custom_minimum_size.y = 40
 	_search.text_submitted.connect(func(text: String) -> void:
@@ -170,7 +158,7 @@ func _build_ui() -> void:
 		_page = 1
 		_load_page())
 	tools.add_child(_search)
-	var search_button: Button = _button("Search", true)
+	var search_button: GAME_BUTTON = _button("Search", true)
 	search_button.pressed.connect(func() -> void:
 		_query = _search.text.strip_edges()
 		_page = 1
@@ -189,24 +177,25 @@ func _build_ui() -> void:
 	_sort.item_selected.connect(func(_index: int) -> void:
 		_page = 1
 		_load_page())
-	tools.add_child(_sort)
+	navigation.add_child(_sort)
 	_rated = CheckBox.new()
-	_rated.text = "Include content-rated"
+	_rated.text = "Content-rated"
 	_rated.tooltip_text = "Content-rated packs are hidden by default."
 	_rated.toggled.connect(func(_on: bool) -> void: _render_list())
-	tools.add_child(_rated)
-	var refresh: Button = _button("Refresh", false)
-	refresh.pressed.connect(func() -> void: _load_page(true))
-	tools.add_child(refresh)
+	navigation.add_child(_rated)
+	var refresh: GAME_BUTTON = _button("Refresh", false)
+	refresh.pressed.connect(_refresh_view)
+	navigation.add_child(refresh)
 
 	var split: = HSplitContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.split_offset = 480
-	main.add_child(split)
+	split.split_offset = 288
+	content.add_child(split)
 
 	var left_panel: = PanelContainer.new()
-	left_panel.custom_minimum_size.x = 420
-	left_panel.add_theme_stylebox_override("panel", _box(SURFACE, 12, BORDER, 1))
+	left_panel.custom_minimum_size.x = 288
+	left_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	STYLE.pack_list_panel(left_panel)
 	split.add_child(left_panel)
 	var left_margin: = MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
@@ -218,15 +207,18 @@ func _build_ui() -> void:
 	_list_status = Label.new()
 	_list_status.add_theme_color_override("font_color", MUTED)
 	left.add_child(_list_status)
-	var scroll: = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	left.add_child(scroll)
-	_list = VBoxContainer.new()
+	_list = Tree.new()
+	var native_properties := STYLE.scene_properties("res://scene/menu/customize/menu_customize.tscn", "Border/Main/PackListings/List/MarginContainer/Tree")
+	for property: String in native_properties:
+		if property.begins_with("theme_override") or property in ["allow_reselect", "auto_tooltip"]:
+			_list.set(property, native_properties[property])
+	_list.hide_root = true
+	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list.add_theme_constant_override("separation", 7)
-	scroll.add_child(_list)
+	_list.item_selected.connect(_on_list_selected)
+	left.add_child(_list)
 	var paging: = HBoxContainer.new()
+	_paging = paging
 	paging.alignment = BoxContainer.ALIGNMENT_CENTER
 	paging.add_theme_constant_override("separation", 10)
 	left.add_child(paging)
@@ -248,23 +240,29 @@ func _build_ui() -> void:
 	paging.add_child(_next)
 
 	var right_panel: = PanelContainer.new()
-	right_panel.custom_minimum_size.x = 400
-	right_panel.add_theme_stylebox_override("panel", _box(SURFACE, 12, BORDER, 1))
+	right_panel.custom_minimum_size.x = 300
+	right_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	STYLE.dark_panel(right_panel)
 	split.add_child(right_panel)
 	var right_margin: = MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
 		right_margin.add_theme_constant_override("margin_" + side, 18)
 	right_panel.add_child(right_margin)
+	var detail_column := VBoxContainer.new()
+	right_margin.add_child(detail_column)
 	var detail_scroll: = ScrollContainer.new()
+	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	right_margin.add_child(detail_scroll)
+	detail_column.add_child(detail_scroll)
 	var detail: = VBoxContainer.new()
+	_detail_content = detail
+	detail.visible = false
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail.add_theme_constant_override("separation", 10)
 	detail_scroll.add_child(detail)
 	var preview_panel: = PanelContainer.new()
-	preview_panel.custom_minimum_size = Vector2(400, 170)
-	preview_panel.add_theme_stylebox_override("panel", _box(SURFACE_2, 8, BORDER, 1))
+	preview_panel.custom_minimum_size = Vector2(240, 150)
+	preview_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	detail.add_child(preview_panel)
 	_preview = TextureRect.new()
 	_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -278,23 +276,25 @@ func _build_ui() -> void:
 	_preview_placeholder.add_theme_color_override("font_color", MUTED)
 	preview_panel.add_child(_preview_placeholder)
 	_detail_title = Label.new()
-	_detail_title.text = "Choose a pack"
+	_detail_title.text = ""
 	_detail_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail_title.add_theme_font_size_override("font_size", 24)
-	_detail_title.add_theme_color_override("font_color", TEXT)
+	_detail_title.add_theme_color_override("font_color", Color.WHITE)
 	detail.add_child(_detail_title)
 	_detail_meta = Label.new()
 	_detail_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_detail_meta.add_theme_color_override("font_color", MUTED)
+	_detail_meta.add_theme_color_override("font_color", Color("cccccc"))
 	detail.add_child(_detail_meta)
 	_detail_description = Label.new()
-	_detail_description.text = "Select a result to see its files and installation status."
+	_detail_description.text = ""
+	_detail_description.add_theme_color_override("font_color", Color.WHITE)
 	_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail.add_child(_detail_description)
 	var file_label: = Label.new()
 	file_label.text = "Download file"
 	file_label.add_theme_font_size_override("font_size", 14)
 	file_label.add_theme_color_override("font_color", MUTED)
+	file_label.visible = false
 	detail.add_child(file_label)
 	_file_picker = OptionButton.new()
 	# GameBanana filenames are untrusted layout input too. OptionButton normally
@@ -312,12 +312,16 @@ func _build_ui() -> void:
 	detail.add_child(_install_progress)
 	_install_status = Label.new()
 	_install_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_install_status.add_theme_color_override("font_color", MUTED)
+	_install_status.add_theme_color_override("font_color", Color("cccccc"))
 	detail.add_child(_install_status)
 	var detail_buttons: = HBoxContainer.new()
+	_detail_actions = detail_buttons
+	detail_buttons.visible = false
 	detail_buttons.add_theme_constant_override("separation", 8)
-	detail.add_child(detail_buttons)
-	_install_button = _button("Install pack", true)
+	detail_column.add_child(detail_buttons)
+	_mode_actions = HBoxContainer.new()
+	detail_column.add_child(_mode_actions)
+	_install_button = _button("Install", true)
 	_install_button.disabled = true
 	_install_button.pressed.connect(_on_install_pressed)
 	detail_buttons.add_child(_install_button)
@@ -325,7 +329,7 @@ func _build_ui() -> void:
 	_uninstall_button.visible = false
 	_uninstall_button.pressed.connect(_on_uninstall_pressed)
 	detail_buttons.add_child(_uninstall_button)
-	_open_button = _button("Open on GameBanana", false)
+	_open_button = _button("GameBanana", false)
 	_open_button.disabled = true
 	_open_button.pressed.connect(func() -> void:
 		var url: String = str(_selected.get("profile_url", ""))
@@ -336,140 +340,15 @@ func _build_ui() -> void:
 		+ "but only install packs from creators you trust.")
 	caution.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	caution.add_theme_color_override("font_color", WARNING)
+	caution.visible = false
 	detail.add_child(caution)
 
-	_build_downloads_modal()
-	_build_installed_modal()
-
-
-func _build_downloads_modal() -> void:
-	_downloads_modal = Control.new()
-	_downloads_modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_downloads_modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	_downloads_modal.visible = false
-	add_child(_downloads_modal)
-	var backdrop: = ColorRect.new()
-	backdrop.color = Color(0.01, 0.015, 0.03, 0.88)
-	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_downloads_modal.add_child(backdrop)
-	var center: = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_downloads_modal.add_child(center)
-	var panel: = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(720, 430)
-	panel.add_theme_stylebox_override("panel", _box(SURFACE, 12, BORDER, 1))
-	center.add_child(panel)
-	var margin: = MarginContainer.new()
-	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 20)
-	panel.add_child(margin)
-	var column: = VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
-	margin.add_child(column)
-	var header: = HBoxContainer.new()
-	column.add_child(header)
-	var title: = Label.new()
-	title.text = "DOWNLOAD QUEUE"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", TEXT)
-	header.add_child(title)
-	var close: Button = _button("Close", false)
-	close.pressed.connect(func() -> void: _downloads_modal.visible = false)
-	header.add_child(close)
-	_download_summary = Label.new()
-	_download_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_download_summary.add_theme_color_override("font_color", MUTED)
-	column.add_child(_download_summary)
-	_online_downloads_box = CheckBox.new()
-	_online_downloads_box.text = "Allow downloads to start during online multiplayer"
-	_online_downloads_box.tooltip_text = (
-		"Large downloads can increase multiplayer latency. Active downloads are not stopped "
-		+ "when this is turned off.")
-	_online_downloads_box.add_theme_color_override("font_color", WARNING)
-	_online_downloads_box.toggled.connect(func(value: bool) -> void:
-		_downloads.set_allow_online_downloads(value))
-	column.add_child(_online_downloads_box)
-	var scroll: = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	column.add_child(scroll)
-	_downloads_list = VBoxContainer.new()
-	_downloads_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_downloads_list.add_theme_constant_override("separation", 8)
-	scroll.add_child(_downloads_list)
-	_downloads_note = Label.new()
-	_downloads_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_downloads_note.add_theme_color_override("font_color", MUTED)
-	column.add_child(_downloads_note)
-
 	_uninstall_dialog = ConfirmationDialog.new()
+	_uninstall_dialog.theme = STYLE.dialog_theme()
+	_uninstall_dialog.dialog_autowrap = true
 	_uninstall_dialog.title = "Uninstall community pack?"
 	_uninstall_dialog.confirmed.connect(_confirm_uninstall)
 	add_child(_uninstall_dialog)
-
-
-func _build_installed_modal() -> void:
-	_installed_modal = Control.new()
-	_installed_modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_installed_modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	_installed_modal.visible = false
-	add_child(_installed_modal)
-	var backdrop: = ColorRect.new()
-	backdrop.color = Color(0.01, 0.015, 0.03, 0.88)
-	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_installed_modal.add_child(backdrop)
-	var center: = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_installed_modal.add_child(center)
-	var panel: = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(720, 470)
-	panel.add_theme_stylebox_override("panel", _box(SURFACE, 12, BORDER, 1))
-	center.add_child(panel)
-	var margin: = MarginContainer.new()
-	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 20)
-	panel.add_child(margin)
-	var column: = VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
-	margin.add_child(column)
-	var header: = HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	column.add_child(header)
-	var title: = Label.new()
-	title.text = "INSTALLED COMMUNITY PACKS"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", TEXT)
-	header.add_child(title)
-	var refresh: Button = _button("Refresh", false)
-	refresh.pressed.connect(_render_installed)
-	header.add_child(refresh)
-	var close: Button = _button("Close", false)
-	close.pressed.connect(func() -> void: _installed_modal.visible = false)
-	header.add_child(close)
-	_installed_summary = Label.new()
-	_installed_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_installed_summary.add_theme_color_override("font_color", MUTED)
-	column.add_child(_installed_summary)
-	var scroll: = ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	column.add_child(scroll)
-	_installed_list = VBoxContainer.new()
-	_installed_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_installed_list.add_theme_constant_override("separation", 8)
-	scroll.add_child(_installed_list)
-	_installed_feedback = Label.new()
-	_installed_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_installed_feedback.add_theme_color_override("font_color", MUTED)
-	column.add_child(_installed_feedback)
-	var note: = Label.new()
-	note.text = ("Only packs installed by this browser are listed. Manually installed folders are "
-		+ "never removed, and uninstalling is disabled during online play.")
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.add_theme_color_override("font_color", MUTED)
-	column.add_child(note)
 
 
 func _load_page(force: bool = false) -> void:
@@ -493,6 +372,7 @@ func _set_list_busy(busy: bool) -> void:
 
 
 func _on_page_loaded(payload: Dictionary) -> void:
+	if _view_mode != "browse": return
 	_loading_detail = false
 	_page = int(payload.get("page", _page))
 	_complete = bool(payload.get("complete", false))
@@ -510,58 +390,27 @@ func _on_page_loaded(payload: Dictionary) -> void:
 
 
 func _render_list() -> void:
-	for child: Node in _list.get_children():
-		_list.remove_child(child)
-		child.queue_free()
-	var shown: int = 0
-	var hidden: int = 0
+	if _view_mode != "browse": return
+	_list.clear()
+	var root_item := _list.create_item()
 	for record: Dictionary in _records:
-		if bool(record.get("content_rated", false)) and not _rated.button_pressed:
-			hidden += 1
-			continue
-		shown += 1
-		var row: Button = Button.new()
-		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		row.custom_minimum_size.y = 68
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.clip_text = true
-		row.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		var category: String = str(record.get("subcategory", ""))
-		if category.is_empty(): category = str(record.get("category", "Dub Mode"))
-		if category.is_empty(): category = "Dub Mode"
-		var warning: String = "  •  CONTENT-RATED" if bool(record.get("content_rated", false)) else ""
-		row.text = "%s\nby %s  •  %s%s" % [
-			_compact_text(str(record["name"]), 64),
-			_compact_text(str(record["author"]), 36),
-			_compact_text(category, 28),
-			warning,
-		]
-		row.tooltip_text = "%s\nby %s" % [
-			str(record.get("name", "")), str(record.get("author", "Unknown creator"))]
-		row.add_theme_font_size_override("font_size", 15)
-		row.add_theme_color_override("font_color", TEXT)
-		row.add_theme_color_override("font_hover_color", TEXT)
-		row.add_theme_stylebox_override("normal", _box(SURFACE_2, 8, Color.TRANSPARENT, 0))
-		row.add_theme_stylebox_override("hover", _box(Color("25304a"), 8, ACCENT, 1))
-		row.add_theme_stylebox_override("pressed", _box(Color("202c45"), 8, ACCENT, 2))
-		row.pressed.connect(_select_record.bind(record))
-		_list.add_child(row)
-	if shown == 0 and not _records.is_empty():
-		var empty: = Label.new()
-		empty.text = "%d content-rated result(s) hidden. Enable the checkbox above to show them." % hidden
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty.add_theme_color_override("font_color", MUTED)
-		_list.add_child(empty)
-	elif shown == 0 and not _catalog.is_busy():
-		var empty: = Label.new()
-		empty.text = "No Dub Mode packs were found on this page."
-		empty.add_theme_color_override("font_color", MUTED)
-		_list.add_child(empty)
+		if bool(record.get("content_rated", false)) and not _rated.button_pressed: continue
+		var item := _list.create_item(root_item)
+		item.set_text(0, str(record.get("name", "Dub pack")))
+		item.set_tooltip_text(0, "by %s • %s" % [record.get("author", "Unknown"), record.get("subcategory", "Dub Mode")])
+		item.set_metadata(0, record)
+		if int(record.get("id", -1)) == int(_selected.get("id", -2)): item.select(0)
+	if root_item.get_child_count() == 0:
+		var item := _list.create_item(root_item)
+		item.set_text(0, "No matching packs")
+		item.set_selectable(0, false)
 
 
 func _select_record(record: Dictionary) -> void:
 	if _catalog.is_busy(): return
 	_loading_detail = true
+	_detail_content.visible = true
+	_detail_actions.visible = true
 	_selected = record.duplicate(true)
 	_detail.clear()
 	_preview.texture = null
@@ -579,6 +428,7 @@ func _select_record(record: Dictionary) -> void:
 
 
 func _on_detail_loaded(detail: Dictionary) -> void:
+	if _view_mode != "browse": return
 	_loading_detail = false
 	if int(detail.get("id", 0)) != int(_selected.get("id", 0)): return
 	for key: Variant in _selected:
@@ -591,7 +441,7 @@ func _on_detail_loaded(detail: Dictionary) -> void:
 	if bool(detail.get("content_rated", false)): parts.append("CONTENT-RATED")
 	_detail_meta.text = "  •  ".join(parts)
 	_detail_meta.add_theme_color_override(
-		"font_color", WARNING if bool(detail.get("content_rated", false)) else MUTED)
+		"font_color", WARNING if bool(detail.get("content_rated", false)) else Color("cccccc"))
 	var description: String = str(detail.get("description", ""))
 	_detail_description.text = description if not description.is_empty() else "No description was provided."
 	_file_picker.clear()
@@ -623,7 +473,12 @@ func _selected_file() -> Dictionary:
 
 
 func _refresh_install_action() -> void:
+	if _view_mode != "browse": return
 	if not is_instance_valid(_downloads): return
+	if _selected.is_empty() or _loading_detail:
+		_install_button.disabled = true
+		_install_status.text = ""
+		return
 	var mod_id: int = int(_detail.get("id", 0))
 	var installed: String = INSTALLER_SCRIPT.installed_path(mod_id)
 	_uninstall_button.visible = not installed.is_empty()
@@ -657,7 +512,7 @@ func _refresh_install_action() -> void:
 		if state == "queued" and Net.is_online() and not _downloads.allow_online_downloads():
 			status = "Queued — waiting until you leave online multiplayer."
 		_install_status.text = status
-		_install_status.add_theme_color_override("font_color", MUTED)
+		_install_status.add_theme_color_override("font_color", Color("cccccc"))
 		return
 	if state in ["failed", "canceled"]:
 		_install_progress.visible = false
@@ -666,11 +521,11 @@ func _refresh_install_action() -> void:
 		_install_status.text = str(job.get(
 			"error", "Canceled" if state == "canceled" else "Download failed"))
 		if _install_status.text.is_empty(): _install_status.text = "Canceled"
-		_install_status.add_theme_color_override("font_color", DANGER if state == "failed" else MUTED)
+		_install_status.add_theme_color_override("font_color", DANGER if state == "failed" else Color("cccccc"))
 		return
 	var problem: String = INSTALLER_SCRIPT.installability_problem(file)
 	_install_progress.visible = false
-	_install_button.text = "Add to download queue"
+	_install_button.text = "Download"
 	_install_button.disabled = not problem.is_empty()
 	if not problem.is_empty():
 		_install_status.text = problem
@@ -682,8 +537,8 @@ func _refresh_install_action() -> void:
 		_install_status.text = "Ready to queue online. Large downloads may increase multiplayer latency."
 		_install_status.add_theme_color_override("font_color", WARNING)
 	else:
-		_install_status.text = "Ready to queue. Downloads continue during offline play."
-		_install_status.add_theme_color_override("font_color", MUTED)
+		_install_status.text = ""
+		_install_status.add_theme_color_override("font_color", Color("cccccc"))
 
 
 func _on_install_pressed() -> void:
@@ -704,7 +559,9 @@ func _on_downloads_changed() -> void:
 		_online_downloads_box.set_pressed_no_signal(_downloads.allow_online_downloads())
 	var active: int = _downloads.active_count()
 	_downloads_button.text = "Downloads (%d)" % active if active > 0 else "Downloads"
-	if is_instance_valid(_downloads_modal) and _downloads_modal.visible: _render_downloads()
+	if _view_mode == "downloads":
+		_render_downloads()
+		return
 	if not _update_selected_active_download(): _refresh_install_action()
 
 
@@ -723,172 +580,152 @@ func _update_selected_active_download() -> bool:
 	_install_status.text = str(job.get("status", "Queued"))
 	if state == "queued" and Net.is_online() and not _downloads.allow_online_downloads():
 		_install_status.text = "Queued — waiting until you leave online multiplayer."
-	_install_status.add_theme_color_override("font_color", MUTED)
+	_install_status.add_theme_color_override("font_color", Color("cccccc"))
 	return true
 
 
+func _set_view(mode: String) -> void:
+	_catalog.cancel()
+	_image_http.cancel_request()
+	_loading_detail = false
+	_view_mode = mode
+	_search_tools.visible = mode == "browse"
+	_paging.visible = mode == "browse"
+	_sort.visible = mode == "browse"
+	_rated.visible = mode == "browse"
+	_online_downloads_box.visible = mode == "downloads"
+	_detail_content.hide()
+	_detail_actions.hide()
+	_mode_actions.hide()
+	_preview.get_parent().visible = mode == "browse"
+	_file_picker.visible = mode == "browse"
+	_install_button.visible = mode == "browse"
+	_uninstall_button.hide()
+	_install_progress.hide()
+	_selected_job = ""
+	_list.clear()
+
+
+func _show_browse() -> void:
+	_set_view("browse")
+	_load_page()
+
+
 func _show_downloads() -> void:
-	if is_instance_valid(_installed_modal): _installed_modal.visible = false
+	_set_view("downloads")
 	_render_downloads()
-	_downloads_modal.visible = true
 
 
 func _show_installed() -> void:
-	if is_instance_valid(_downloads_modal): _downloads_modal.visible = false
-	_installed_feedback.text = ""
+	_set_view("installed")
 	_render_installed()
-	_installed_modal.visible = true
+
+
+func _refresh_view() -> void:
+	match _view_mode:
+		"installed": _render_installed()
+		"downloads": _render_downloads()
+		_: _load_page(true)
+
+
+func _on_list_selected() -> void:
+	var item := _list.get_selected()
+	if item == null: return
+	var record: Dictionary = item.get_metadata(0)
+	match _view_mode:
+		"installed": _show_installed_detail(record)
+		"downloads": _show_download_detail(record)
+		_: _select_record(record)
 
 
 func _render_installed() -> void:
-	if not is_instance_valid(_installed_list): return
-	for child: Node in _installed_list.get_children():
-		_installed_list.remove_child(child)
-		child.queue_free()
+	if _view_mode != "installed": return
+	_list.clear()
+	var root_item := _list.create_item()
 	var packs: Array[Dictionary] = INSTALLER_SCRIPT.installed_packs()
-	_installed_summary.text = (
-		"%d community pack%s installed by this browser." % [
-			packs.size(), "" if packs.size() == 1 else "s"])
-	if packs.is_empty():
-		var empty: = Label.new()
-		empty.text = "No browser-installed community packs were found."
-		empty.add_theme_color_override("font_color", MUTED)
-		_installed_list.add_child(empty)
-		return
+	_list_status.text = "Installed packs (%d)" % packs.size()
 	for pack: Dictionary in packs:
-		var card: = PanelContainer.new()
-		card.add_theme_stylebox_override("panel", _box(SURFACE_2, 8, BORDER, 1))
-		_installed_list.add_child(card)
-		var row: = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		card.add_child(row)
-		var info: = VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(info)
-		var title: = Label.new()
-		title.text = str(pack.get("name", pack.get("folder", "Dub pack")))
-		title.clip_text = true
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title.add_theme_color_override("font_color", TEXT)
-		info.add_child(title)
-		var details: PackedStringArray = []
-		var author: String = str(pack.get("author", "")).strip_edges()
-		if not author.is_empty(): details.append("by " + author)
-		var installed_bytes: int = int(pack.get("installed_bytes", 0))
-		if installed_bytes > 0: details.append(_format_bytes(installed_bytes))
-		var installed_unix: int = int(pack.get("installed_unix", 0))
-		if installed_unix > 0:
-			details.append("installed " + Time.get_datetime_string_from_unix_time(
-				installed_unix, true))
-		var meta: = Label.new()
-		meta.text = "  •  ".join(details)
-		meta.add_theme_color_override("font_color", MUTED)
-		info.add_child(meta)
-		var folder: = Label.new()
-		folder.text = "Folder: %s" % str(pack.get("folder", ""))
-		folder.clip_text = true
-		folder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		folder.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		folder.add_theme_font_size_override("font_size", 12)
-		folder.add_theme_color_override("font_color", MUTED.darkened(0.12))
-		info.add_child(folder)
-		var actions: = VBoxContainer.new()
-		actions.add_theme_constant_override("separation", 6)
-		row.add_child(actions)
-		var mod_id: int = int(pack.get("mod_id", 0))
-		var uninstall: Button = _button("Uninstall", false)
-		uninstall.disabled = Net.is_online() or _mod_has_active_job(mod_id)
-		if Net.is_online():
-			uninstall.tooltip_text = "Leave online play before changing the pack library."
-		elif _mod_has_active_job(mod_id):
-			uninstall.tooltip_text = "Cancel or finish this pack's active download first."
-		uninstall.pressed.connect(_request_uninstall.bind(pack))
-		actions.add_child(uninstall)
-		var profile_url: String = str(pack.get("profile_url", ""))
-		if profile_url.begins_with("https://gamebanana.com/"):
-			var page: Button = _button("GameBanana", false)
-			page.pressed.connect(_open_gamebanana.bind(profile_url))
-			actions.add_child(page)
+		var item := _list.create_item(root_item)
+		item.set_text(0, str(pack.get("name", pack.get("folder", "Dub pack"))))
+		item.set_metadata(0, pack)
+	if packs.is_empty():
+		var item := _list.create_item(root_item)
+		item.set_text(0, "No browser-installed packs")
+		item.set_selectable(0, false)
+
+
+func _show_installed_detail(pack: Dictionary) -> void:
+	_detail = {"id": pack.get("mod_id", 0), "name": pack.get("name", "Dub pack")}
+	_selected = {"profile_url": pack.get("profile_url", "")}
+	_detail_content.show()
+	_detail_actions.show()
+	_detail_title.text = str(pack.get("name", "Dub pack"))
+	_detail_meta.text = "by %s • %s" % [pack.get("author", "Unknown"), _format_bytes(int(pack.get("installed_bytes", 0)))]
+	_detail_description.text = "Folder: %s" % pack.get("folder", "")
+	_install_status.text = "Leave online play before uninstalling." if Net.is_online() else ""
+	_uninstall_button.show()
+	_uninstall_button.disabled = Net.is_online() or _mod_has_active_job(int(pack.get("mod_id", 0)))
+	_open_button.disabled = not str(pack.get("profile_url", "")).begins_with("https://gamebanana.com/")
 
 
 func _render_downloads() -> void:
-	if not is_instance_valid(_downloads_list) or not is_instance_valid(_downloads): return
-	for child: Node in _downloads_list.get_children():
-		_downloads_list.remove_child(child)
-		child.queue_free()
+	if _view_mode != "downloads": return
+	_list.set_block_signals(true)
+	_list.clear()
+	var root_item := _list.create_item()
 	var jobs: Array[Dictionary] = _downloads.get_jobs()
-	var active: int = _downloads.active_count()
-	_download_summary.text = (
-		"%d active or queued. Downloads run one at a time to limit connection saturation." % active)
-	_downloads_note.text = (
-		"Downloads continue while this screen is closed. Online starts are enabled; turning "
-		+ "this off will not stop the active download, but the next queued item will wait."
-		if _downloads.allow_online_downloads()
-		else "Downloads continue while this screen is closed and during offline play. New queued "
-		+ "downloads wait while you are in online multiplayer unless you enable the option above.")
-	if jobs.is_empty():
-		var empty: = Label.new()
-		empty.text = "No downloads in this session."
-		empty.add_theme_color_override("font_color", MUTED)
-		_downloads_list.add_child(empty)
-		return
+	_list_status.text = "Downloads (%d)" % jobs.size()
 	for job: Dictionary in jobs:
-		var card: = PanelContainer.new()
-		card.add_theme_stylebox_override("panel", _box(SURFACE_2, 8, BORDER, 1))
-		_downloads_list.add_child(card)
-		var row: = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		card.add_child(row)
-		var info: = VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(info)
+		var item := _list.create_item(root_item)
 		var mod: Dictionary = job.get("mod", {})
-		var file: Dictionary = job.get("file", {})
-		var title: = Label.new()
-		title.text = "%s  —  %s" % [str(mod.get("name", "Dub pack")), str(file.get("name", "ZIP"))]
-		title.clip_text = true
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title.tooltip_text = "%s — %s" % [
-			str(mod.get("name", "Dub pack")), str(file.get("name", "ZIP"))]
-		title.add_theme_color_override("font_color", TEXT)
-		info.add_child(title)
-		var state: String = str(job.get("state", "queued"))
-		var status: = Label.new()
-		status.text = str(job.get("status", state.capitalize()))
-		if state == "queued" and Net.is_online() and not _downloads.allow_online_downloads():
-			status.text = "Queued — waiting until online multiplayer closes"
-		if state == "failed" and not str(job.get("error", "")).is_empty():
-			status.text += " — " + str(job["error"])
-		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		status.add_theme_color_override(
-			"font_color", DANGER if state == "failed" else SUCCESS if state == "finished" else MUTED)
-		info.add_child(status)
-		if state in ["queued", "downloading", "verifying", "installing"]:
-			var progress: = ProgressBar.new()
-			progress.show_percentage = state != "queued"
-			progress.max_value = maxi(1, int(job.get("total", 0)))
-			progress.value = clampi(int(job.get("received", 0)), 0, int(progress.max_value))
-			info.add_child(progress)
-		var actions: = VBoxContainer.new()
-		row.add_child(actions)
-		var id: String = str(job.get("id", ""))
-		if state in ["queued", "downloading"]:
-			var cancel: Button = _button("Cancel", false)
-			cancel.pressed.connect(_downloads.cancel.bind(id))
-			actions.add_child(cancel)
-		elif state in ["failed", "canceled"]:
-			var retry: Button = _button("Retry", true)
-			retry.pressed.connect(_downloads.retry.bind(id))
-			actions.add_child(retry)
-			var dismiss: Button = _button("Dismiss", false)
-			dismiss.pressed.connect(_downloads.dismiss.bind(id))
-			actions.add_child(dismiss)
-		elif state == "finished":
-			var dismiss: Button = _button("Dismiss", false)
-			dismiss.pressed.connect(_downloads.dismiss.bind(id))
-			actions.add_child(dismiss)
+		item.set_text(0, str(mod.get("name", "Dub pack")))
+		item.set_metadata(0, job)
+		if str(job.get("id", "")) == _selected_job:
+			item.select(0)
+			_show_download_detail(job)
+	if jobs.is_empty():
+		var item := _list.create_item(root_item)
+		item.set_text(0, "No downloads")
+		item.set_selectable(0, false)
+	_list.set_block_signals(false)
+
+
+func _show_download_detail(job: Dictionary) -> void:
+	_selected_job = str(job.get("id", ""))
+	var mod: Dictionary = job.get("mod", {})
+	var file: Dictionary = job.get("file", {})
+	_detail_content.show()
+	_detail_title.text = str(mod.get("name", "Dub pack"))
+	_detail_meta.text = str(file.get("name", "ZIP"))
+	_detail_description.text = str(job.get("status", job.get("state", "Queued")))
+	_install_status.text = str(job.get("error", ""))
+	var state: String = str(job.get("state", ""))
+	_install_progress.visible = state in ["downloading", "verifying", "installing"]
+	_install_progress.max_value = maxi(1, int(job.get("total", 0)))
+	_install_progress.value = int(job.get("received", 0))
+	for child: Node in _mode_actions.get_children():
+		_mode_actions.remove_child(child)
+		child.queue_free()
+	_mode_actions.show()
+	if state in ["queued", "downloading"]:
+		var cancel := _button("Cancel", false)
+		cancel.pressed.connect(_downloads.cancel.bind(_selected_job))
+		_mode_actions.add_child(cancel)
+	elif state in ["failed", "canceled", "finished"]:
+		if state != "finished":
+			var retry := _button("Retry", false)
+			retry.pressed.connect(_downloads.retry.bind(_selected_job))
+			_mode_actions.add_child(retry)
+		var dismiss := _button("Dismiss", false)
+		dismiss.pressed.connect(_dismiss_job.bind(_selected_job))
+		_mode_actions.add_child(dismiss)
+
+
+func _dismiss_job(id: String) -> void:
+	_selected_job = ""
+	_detail_content.hide()
+	_mode_actions.hide()
+	_downloads.dismiss(id)
 
 
 func _mod_has_active_job(mod_id: int) -> bool:
@@ -933,9 +770,6 @@ func _confirm_uninstall() -> void:
 	var result: Dictionary = INSTALLER_SCRIPT.uninstall(mod_id, str(pack.get("path", "")))
 	if result.has("error"):
 		var message: String = str(result["error"])
-		if is_instance_valid(_installed_feedback):
-			_installed_feedback.text = message
-			_installed_feedback.add_theme_color_override("font_color", DANGER)
 		if int(_detail.get("id", 0)) == mod_id:
 			_install_status.text = message
 			_install_status.add_theme_color_override("font_color", DANGER)
@@ -946,10 +780,10 @@ func _confirm_uninstall() -> void:
 		_refresh_install_action()
 		_install_status.text = "Uninstalled %s." % str(pack.get("name", "community pack"))
 		_install_status.add_theme_color_override("font_color", SUCCESS)
-	if is_instance_valid(_installed_list):
+	if _view_mode == "installed":
+		_detail_content.hide()
+		_detail_actions.hide()
 		_render_installed()
-		_installed_feedback.text = "Uninstalled %s." % str(pack.get("name", "community pack"))
-		_installed_feedback.add_theme_color_override("font_color", SUCCESS)
 
 
 func _on_request_failed(message: String) -> void:
@@ -992,19 +826,9 @@ func _on_image_loaded(
 		_preview_placeholder.text = "PREVIEW UNAVAILABLE"
 
 
-static func _button(text: String, primary: bool) -> Button:
-	var button: = Button.new()
+static func _button(text: String, _primary: bool) -> GAME_BUTTON:
+	var button := GAME_BUTTON.new()
 	button.text = text
-	button.custom_minimum_size.y = 38
-	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_color_override("font_color", Color("071019") if primary else TEXT)
-	button.add_theme_color_override("font_hover_color", Color("071019") if primary else TEXT)
-	button.add_theme_stylebox_override(
-		"normal", _box(ACCENT if primary else SURFACE_2, 7, ACCENT if primary else BORDER, 1))
-	button.add_theme_stylebox_override(
-		"hover", _box(ACCENT.lightened(0.15) if primary else Color("26324b"), 7, ACCENT, 1))
-	button.add_theme_stylebox_override(
-		"pressed", _box(ACCENT.darkened(0.1) if primary else Color("1d2941"), 7, ACCENT, 2))
 	return button
 
 

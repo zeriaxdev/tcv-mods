@@ -1556,13 +1556,12 @@ func rebuild_clip_set(paths: PackedStringArray) -> PackedStringArray:
 # were pressing it on the stock exe. None of that gets better by reading the key
 # more carefully, so there is a button on screen now. F9 still works.
 
-const ENTRY_INSET: Vector2 = Vector2(24, 20)
+const MENU_BUTTON = preload("res://net/choicer_button.gd")
+const ENTRY_INSET: Vector2 = Vector2(28, 92)
 
 var _entry_layer: CanvasLayer
-var _entry_button: Button
-var _community_entry_button: Button
-var _community_layer: CanvasLayer
-var _community_browser: Control
+var _entry_button: MENU_BUTTON
+var _community_entry_button: MENU_BUTTON
 var _extras_button: Button
 
 
@@ -1572,16 +1571,18 @@ func _build_the_way_in() -> void:
 	_entry_layer.layer = 128
 	add_child(_entry_layer)
 
-	_entry_button = Button.new()
-	_entry_button.text = "ONLINE  (F9)"
+	_entry_button = MENU_BUTTON.new()
+	_entry_button.theme = preload("res://net/choicer_style.gd").make_theme()
+	_entry_button.text = "Online (F9)"
 	_entry_button.tooltip_text = "Open the multiplayer lobby.\nMultiplayer mod %s, protocol %d." % [
 		MOD_VERSION, PROTOCOL_VERSION]
 	# the menus run on ui_accept, and a button holding focus eats the first press.
 	_entry_button.focus_mode = Control.FOCUS_NONE
 	_entry_button.pressed.connect(open_lobby)
 	_entry_layer.add_child(_entry_button)
-	_community_entry_button = Button.new()
-	_community_entry_button.text = "COMMUNITY PACKS"
+	_community_entry_button = MENU_BUTTON.new()
+	_community_entry_button.theme = preload("res://net/choicer_style.gd").make_theme()
+	_community_entry_button.text = "Community packs"
 	_community_entry_button.tooltip_text = (
 		"Browse and install GameBanana Dub Mode packs. Downloads continue in the background.")
 	_community_entry_button.focus_mode = Control.FOCUS_NONE
@@ -1600,8 +1601,7 @@ func _build_the_way_in() -> void:
 
 func _place_entry_button() -> void:
 	if not is_instance_valid(_entry_button): return
-	_try_attach_extras_button()
-	_entry_button.visible = can_open_lobby()
+	_entry_button.visible = can_open_lobby() and _is_home_slide()
 	_community_entry_button.visible = _entry_button.visible
 	if not _entry_button.visible: return
 	_entry_button.size = _entry_button.get_combined_minimum_size()
@@ -1610,11 +1610,24 @@ func _place_entry_button() -> void:
 		view.x - _entry_button.size.x - ENTRY_INSET.x, ENTRY_INSET.y)
 	var queued: int = community_pack_downloads.active_count()
 	_community_entry_button.text = (
-		"COMMUNITY PACKS  (%d)" % queued if queued > 0 else "COMMUNITY PACKS")
+		"Community packs (%d)" % queued if queued > 0 else "Community packs")
 	_community_entry_button.size = _community_entry_button.get_combined_minimum_size()
 	_community_entry_button.position = Vector2(
 		view.x - _community_entry_button.size.x - ENTRY_INSET.x,
 		_entry_button.position.y + _entry_button.size.y + 8)
+
+
+func _is_home_slide() -> bool:
+	var capsule: Node = M.world.primary_capsule
+	if capsule == null: return false
+	for menu: Node in capsule.get_children():
+		if not menu.scene_file_path.contains("menu_master"): continue
+		var slides: Node = menu.get_node_or_null("SlideCapsule")
+		if slides == null: continue
+		for slide: Node in slides.get_children():
+			if not slide.is_queued_for_deletion() and slide.scene_file_path.ends_with("/menu_home.tscn"):
+				return true
+	return false
 
 
 # menus only. CreateLobby frees everything under primary_capsule, so F9 mid-show
@@ -1640,20 +1653,19 @@ func open_lobby() -> void:
 
 
 func open_community_packs() -> void:
-	if is_instance_valid(_community_browser): return
-	log_net("opening the community pack browser")
-	_community_layer = CanvasLayer.new()
-	_community_layer.layer = 192
-	add_child(_community_layer)
-	_community_browser = preload("res://net/community_pack_browser.gd").new()
-	_community_browser.closed.connect(_close_community_packs)
-	_community_layer.add_child(_community_browser)
-
-
-func _close_community_packs() -> void:
-	if is_instance_valid(_community_layer): _community_layer.queue_free()
-	_community_browser = null
-	_community_layer = null
+	if not get_tree().root.has_node("World"): return
+	for menu: Node in M.world.primary_capsule.get_children():
+		if not menu.scene_file_path.contains("menu_master"): continue
+		var slides: Node = menu.get_node("SlideCapsule")
+		var previous: String = slides.get_child(0).scene_file_path if slides.get_child_count() else "res://scene/menu/home/menu_home.tscn"
+		if previous.ends_with("community_pack_browser.tscn"): return
+		menu.NewSlide("res://net/community_pack_browser.tscn", false)
+		var page: Node = slides.get_child(-1)
+		page.menu_data = page.menu_data.duplicate()
+		page.menu_data.back_path = previous
+		page.menu_data.assume_path = false
+		page.closed.connect(menu.new_slide_from_data)
+		return
 
 
 func community_pack_library_changed() -> void:

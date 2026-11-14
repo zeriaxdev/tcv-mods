@@ -26,7 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 MOD = HERE / "mod"
 
-SUPPORTED_VERSIONS = ["0.5.1", "0.5.2", "0.5.3"]
+SUPPORTED_VERSIONS = ["0.5.3"]
 GAME_VERSION = " or ".join(SUPPORTED_VERSIONS)
 
 KNOWN_GAME_SIZES = {
@@ -691,7 +691,7 @@ def detect_version(work: Path) -> str:
 
 def patch_set_for(version: str) -> list[Path]:
     version_dir = MOD / "patches" / ("v" + version.replace(".", "_"))
-    if not version_dir.is_dir():
+    if version not in SUPPORTED_VERSIONS or not version_dir.is_dir():
         raise Failed(
             f"this build reports version {version}, which the mod does not "
             f"handle yet.\n  Supported: {', '.join(SUPPORTED_VERSIONS)}.")

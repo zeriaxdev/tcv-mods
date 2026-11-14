@@ -1,13 +1,15 @@
 --- a/scene/singleton/world.gd
 +++ b/scene/singleton/world.gd
-@@ -141,7 +141,14 @@
+@@ -141,3 +141,12 @@
 
 
 
 +func CreateLobby() -> void :
 +	await _standard_down()
-+	var lobby: Control = load("res://net/lobby.gd").new()
++	var lobby: Control = load("res://scene/menu/_master/menu_master.tscn").instantiate()
++	lobby.stopgap_ignore_standard_instruction = true
 +	primary_capsule.add_child(lobby)
++	lobby.NewSlide("res://net/lobby.tscn", false)
 +	await _standard_up()
 +
 +
