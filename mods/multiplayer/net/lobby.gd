@@ -474,10 +474,9 @@ func _refresh() -> void:
 		var mismatched: PackedStringArray = Net.mismatched_players()
 		if mismatched.is_empty(): warning_label.text = ""
 		else:
-			warning_label.text = ("Your voice pack libraries are not identical: %s.\n"
-				+ "Standard mode only cares if the host picks clips from one of these packs. "
-				+ "For Dub Mode, a missing selected pack is okay: enable experimental pack sharing, "
-				+ "let everyone accept and verify it, then begin the dub.") % "; ".join(mismatched)
+			warning_label.text = ("%s.\n"
+				+ "Gameshow only minds if the host picks clips from those packs. "
+				+ "In Dub Mode the host can share the pack when starting.") % ".\n".join(mismatched)
 
 
 ### mic test ###################################################################

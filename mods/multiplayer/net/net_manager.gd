@@ -695,31 +695,30 @@ func _as_dictionary(value: Variant) -> Dictionary:
 # matched on contents first, so a pack only gets mentioned when the clips really
 # do differ. a folder name that doesn't line up is no longer worth saying anything
 # about, because nothing downstream cares about it any more.
-func pack_differences(other: Dictionary) -> PackedStringArray:
+# {"missing": packs only you have, "extra": packs only they have,
+#  "different": same name, different clips inside}
+func pack_differences(other: Dictionary) -> Dictionary:
 	var mine: Dictionary = voice_pack_manifest()
 	var my_hashes: Dictionary = {}
 	for k: String in mine: my_hashes[_as_dictionary(mine[k]).get("hash", 0)] = k
 	var their_hashes: Dictionary = {}
 	for k: String in other: their_hashes[_as_dictionary(other[k]).get("hash", 0)] = k
 
-	var diffs: PackedStringArray = []
+	var diffs := {"missing": PackedStringArray(), "extra": PackedStringArray(), "different": PackedStringArray()}
 	for k: String in mine:
-		var ours: Dictionary = _as_dictionary(mine[k])
-		if their_hashes.has(ours.get("hash", 0)): continue
-		# same name on both sides but different clips inside is the one case worth
-		# spelling out, because the counts usually tell you which of you is short.
-		if other.has(k):
-			var theirs: Dictionary = _as_dictionary(other[k])
-			diffs.append("'%s' -- they have %d clip(s), you have %d" % [
-				k, int(theirs.get("clips", 0)), int(ours.get("clips", 0))])
-		else:
-			diffs.append("'%s' -- they don't have this pack at all" % k)
+		if their_hashes.has(_as_dictionary(mine[k]).get("hash", 0)): continue
+		diffs["different" if other.has(k) else "missing"].append(k)
 	for k: String in other:
-		var theirs: Dictionary = _as_dictionary(other[k])
-		if my_hashes.has(theirs.get("hash", 0)): continue
-		if mine.has(k): continue
-		diffs.append("'%s' -- you don't have this pack at all" % k)
+		if my_hashes.has(_as_dictionary(other[k]).get("hash", 0)) or mine.has(k): continue
+		diffs.extra.append(k)
 	return diffs
+
+
+# "2 packs ('A', 'B')" for a couple, just the count past that.
+static func _packs_phrase(template: String, names: PackedStringArray) -> String:
+	var text: String = template % ("%d pack%s" % [names.size(), "" if names.size() == 1 else "s"])
+	if names.size() > 2: return text
+	return text + " ('%s')" % "', '".join(names)
 
 
 func mismatched_players() -> PackedStringArray:
@@ -728,9 +727,13 @@ func mismatched_players() -> PackedStringArray:
 		if id == my_id(): continue
 		# nothing to say until their manifest has actually landed
 		if not manifests.has(id): continue
-		var diffs: PackedStringArray = pack_differences(_as_dictionary(manifests[id]))
-		if not diffs.is_empty():
-			out.append("%s -- %s" % [players[id].get("name", "Player"), ", ".join(diffs)])
+		var diffs: Dictionary = pack_differences(_as_dictionary(manifests[id]))
+		var parts: PackedStringArray = []
+		if not diffs.missing.is_empty(): parts.append(_packs_phrase("is missing %s of yours", diffs.missing))
+		if not diffs.extra.is_empty(): parts.append(_packs_phrase("has %s you don't", diffs.extra))
+		if not diffs.different.is_empty(): parts.append(_packs_phrase("has a different version of %s", diffs.different))
+		if not parts.is_empty():
+			out.append("%s %s" % [players[id].get("name", "Player"), ", ".join(parts)])
 	return out
 
 
