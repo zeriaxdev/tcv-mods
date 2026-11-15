@@ -85,7 +85,7 @@ func fetch_detail(mod_id: int, force: bool = false) -> void:
 func _start(url: String, force: bool) -> void:
 	_request_serial += 1
 	_http = HTTPRequest.new()
-	_http.use_threads = true
+	_http.use_threads = false
 	_http.timeout = 15.0
 	_http.body_size_limit = API_BODY_LIMIT
 	_http.request_completed.connect(_on_request_completed.bind(_request_serial))

@@ -27,6 +27,7 @@ var _image_http: HTTPRequest
 var _page: int = 1
 var _complete: bool = false
 var _query: String = ""
+var _view_queries: Dictionary = {}
 var _records: Array[Dictionary] = []
 var _selected: Dictionary = {}
 var _detail: Dictionary = {}
@@ -82,7 +83,7 @@ func _ready() -> void:
 	_downloads = CommunityPacks.downloads
 	_downloads.changed.connect(_on_downloads_changed)
 	_image_http = HTTPRequest.new()
-	_image_http.use_threads = true
+	_image_http.use_threads = false
 	_image_http.timeout = 12.0
 	_image_http.body_size_limit = 12 * 1024 * 1024
 	_image_http.request_completed.connect(_on_image_loaded)
@@ -129,20 +130,20 @@ func _build_ui() -> void:
 	navigation.add_theme_constant_override("separation", 12)
 	workspace.add_child(navigation)
 	_nav_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
-	_nav_tabs.large_buttons = false
+	_nav_tabs.large_buttons = true
 	_nav_tabs.columns = 1
 	_nav_tabs.add_theme_constant_override("v_separation", 12)
 	var browse := _button("Browse packs", false)
 	browse.pressed.connect(_show_browse)
-	browse.use_small()
+	browse.custom_minimum_size.y = 72
 	_nav_tabs.add_child(browse)
 	_installed_button = _button("Installed packs", false)
 	_installed_button.pressed.connect(_show_installed)
-	_installed_button.use_small()
+	_installed_button.custom_minimum_size.y = 72
 	_nav_tabs.add_child(_installed_button)
 	_downloads_button = _button("Downloads", false)
 	_downloads_button.pressed.connect(_show_downloads)
-	_downloads_button.use_small()
+	_downloads_button.custom_minimum_size.y = 72
 	_nav_tabs.add_child(_downloads_button)
 	navigation.add_child(_nav_tabs)
 	var content := VBoxContainer.new()
@@ -161,16 +162,12 @@ func _build_ui() -> void:
 	_search.placeholder_text = "Search packs"
 	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search.custom_minimum_size.y = 40
-	_search.text_submitted.connect(func(text: String) -> void:
-		_query = text.strip_edges()
-		_page = 1
-		_load_page())
+	_search.text_submitted.connect(_on_search_submitted)
+	_search.text_changed.connect(func(text: String) -> void:
+		if _view_mode != "browse": _on_search_submitted(text))
 	tools.add_child(_search)
 	var search_button: GAME_BUTTON = _button("Search", true)
-	search_button.pressed.connect(func() -> void:
-		_query = _search.text.strip_edges()
-		_page = 1
-		_load_page())
+	search_button.pressed.connect(func() -> void: _on_search_submitted(_search.text))
 	tools.add_child(search_button)
 	var filter_slot := Control.new()
 	filter_slot.custom_minimum_size.y = 92
@@ -611,12 +608,18 @@ func _update_selected_active_download() -> bool:
 
 
 func _set_view(mode: String) -> void:
+	_view_queries[_view_mode] = _search.text
 	_catalog.cancel()
 	_image_http.cancel_request()
 	_loading_detail = false
 	_view_mode = mode
 	_nav_tabs.select_item(["browse", "installed", "downloads"].find(mode))
-	_search_tools.visible = mode == "browse"
+	_search_tools.show()
+	_search.set_block_signals(true)
+	_search.text = str(_view_queries.get(mode, ""))
+	_search.set_block_signals(false)
+	_search.placeholder_text = "Search packs" if mode == "browse" else "Search " + mode
+	_search.editable = true
 	_paging.visible = mode == "browse"
 	_sort.visible = mode == "browse"
 	_rated.visible = mode == "browse"
@@ -631,6 +634,16 @@ func _set_view(mode: String) -> void:
 	_install_progress.hide()
 	_selected_job = ""
 	_list.clear()
+
+
+func _on_search_submitted(text: String) -> void:
+	match _view_mode:
+		"installed": _render_installed()
+		"downloads": _render_downloads()
+		_:
+			_query = text.strip_edges()
+			_page = 1
+			_load_page()
 
 
 func _show_browse() -> void:
@@ -670,14 +683,18 @@ func _render_installed() -> void:
 	_list.clear()
 	var root_item := _list.create_item()
 	var packs: Array[Dictionary] = INSTALLER_SCRIPT.installed_packs()
-	_list_status.text = "Installed packs (%d)" % packs.size()
+	var total := packs.size()
+	var query := _search.text.strip_edges().to_lower()
+	if not query.is_empty():
+		packs = packs.filter(func(pack: Dictionary): return ("%s %s %s" % [pack.get("name", ""), pack.get("author", ""), pack.get("folder", "")]).to_lower().contains(query))
+	_list_status.text = "Installed packs (%d)" % packs.size() if query.is_empty() else "Installed packs (%d of %d)" % [packs.size(), total]
 	for pack: Dictionary in packs:
 		var item := _list.create_item(root_item)
 		item.set_text(0, str(pack.get("name", pack.get("folder", "Dub pack"))))
 		item.set_metadata(0, pack)
 	if packs.is_empty():
 		var item := _list.create_item(root_item)
-		item.set_text(0, "No browser-installed packs")
+		item.set_text(0, "No matching packs" if not query.is_empty() else "No browser-installed packs")
 		item.set_selectable(0, false)
 
 
@@ -701,7 +718,11 @@ func _render_downloads() -> void:
 	_list.clear()
 	var root_item := _list.create_item()
 	var jobs: Array[Dictionary] = _downloads.get_jobs()
-	_list_status.text = "Downloads (%d)" % jobs.size()
+	var total := jobs.size()
+	var query := _search.text.strip_edges().to_lower()
+	if not query.is_empty():
+		jobs = jobs.filter(func(job: Dictionary): return ("%s %s %s %s" % [job.get("mod", {}).get("name", ""), job.get("mod", {}).get("author", ""), job.get("file", {}).get("name", ""), job.get("state", "")]).to_lower().contains(query))
+	_list_status.text = "Downloads (%d)" % jobs.size() if query.is_empty() else "Downloads (%d of %d)" % [jobs.size(), total]
 	for job: Dictionary in jobs:
 		var item := _list.create_item(root_item)
 		var mod: Dictionary = job.get("mod", {})
@@ -712,7 +733,7 @@ func _render_downloads() -> void:
 			_show_download_detail(job)
 	if jobs.is_empty():
 		var item := _list.create_item(root_item)
-		item.set_text(0, "No downloads")
+		item.set_text(0, "No matching downloads" if not query.is_empty() else "No downloads")
 		item.set_selectable(0, false)
 	_list.set_block_signals(false)
 

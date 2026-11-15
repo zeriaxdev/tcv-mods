@@ -24,7 +24,7 @@ func check_ui():
  assert(browser._install_status.text == "This submission has no downloadable files.")
  browser._show_installed()
  assert(browser._view_mode == "installed")
- assert(not browser._search_tools.visible)
+ assert(browser._search_tools.visible)
  assert(browser.get_node_or_null("InstalledModal") == null)
  browser._show_installed_detail({"mod_id":42,"name":"Test installed pack","author":"Test","installed_bytes":200,"folder":"Test","profile_url":"https://gamebanana.com/mods/42"})
  assert(browser._uninstall_button.visible)

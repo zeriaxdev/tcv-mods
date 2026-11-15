@@ -34,7 +34,8 @@ var _download_path: String = ""
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.use_threads = true
+	# Threaded HTTP can block cancel_request while a server stalls mid-body.
+	_http.use_threads = false
 	_http.timeout = 0.0
 	_http.download_chunk_size = 256 * 1024
 	_http.request_completed.connect(_on_download_completed)

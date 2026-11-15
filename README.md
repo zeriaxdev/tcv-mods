@@ -34,6 +34,8 @@ Open **Community packs** from the main menu to search GameBanana, install dub pa
 
 This mod already includes the browser. Install [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) separately only if you want the browser without multiplayer.
 
+Search also filters Installed packs and Downloads locally. Navigation uses full-size game buttons.
+
 ## Development and compatibility
 
 The installer adds GDScript modules and targeted game hooks to a locally recovered project, then exports it with Godot. Game resources are loaded from the installed game, rather than included in the mod.

@@ -58,7 +58,7 @@ func _build_ui() -> void:
 	workspace.add_theme_constant_override("separation", 16)
 	margin.add_child(workspace)
 	_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
-	_tabs.large_buttons = false
+	_tabs.large_buttons = true
 	_tabs.columns = 1
 	_tabs.custom_minimum_size.x = 224
 	_tabs.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -66,7 +66,7 @@ func _build_ui() -> void:
 	for text: String in ["Connection", "Contestants"]:
 		var tab := GAME_BUTTON.new()
 		tab.text = text
-		tab.use_small()
+		tab.custom_minimum_size.y = 72
 		_tabs.add_child(tab)
 	_tabs.selection.connect(_show_tab)
 	workspace.add_child(_tabs)
@@ -101,10 +101,12 @@ func _build_ui() -> void:
 	connection_actions.add_theme_constant_override("separation", 12)
 	_connection_body.add_child(connection_actions)
 	host_button = GAME_BUTTON.new()
+	host_button.custom_minimum_size = Vector2(152, 48)
 	host_button.text = "Host"
 	host_button.pressed.connect(_on_host)
 	connection_actions.add_child(host_button)
 	join_button = GAME_BUTTON.new()
+	join_button.custom_minimum_size = Vector2(152, 48)
 	join_button.text = "Join"
 	join_button.pressed.connect(_on_join)
 	connection_actions.add_child(join_button)
@@ -116,6 +118,7 @@ func _build_ui() -> void:
 	_roster_body.add_child(player_rows)
 	ready_button = CheckButton.new()
 	ready_button.text = "Ready"
+	ready_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 		ready_button.add_theme_color_override(state, Color.WHITE)
 	ready_button.toggled.connect(func(on: bool): Net.set_ready(on))
@@ -124,10 +127,12 @@ func _build_ui() -> void:
 	play_actions.add_theme_constant_override("separation", 12)
 	_roster_body.add_child(play_actions)
 	start_button = GAME_BUTTON.new()
+	start_button.custom_minimum_size = Vector2(152, 48)
 	start_button.text = "Gameshow"
 	start_button.pressed.connect(_on_start)
 	play_actions.add_child(start_button)
 	dub_button = GAME_BUTTON.new()
+	dub_button.custom_minimum_size = Vector2(152, 48)
 	dub_button.text = "Dub Mode"
 	dub_button.pressed.connect(_on_start_dub)
 	play_actions.add_child(dub_button)
@@ -156,11 +161,13 @@ func _show_tab(index: int) -> void:
 	_tab_title.text = "Connection" if index == 0 else "Contestants"
 	_connection_body.visible = index == 0
 	_roster_body.visible = index == 1
+	status_label.visible = index == 0 or not Net.is_online()
 
 
 func _labeled_field(parent: Control, label_text: String, default_value: String) -> LineEdit:
 	var row: = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	parent.add_child(row)
 
 	var label: = Label.new()
@@ -170,7 +177,7 @@ func _labeled_field(parent: Control, label_text: String, default_value: String) 
 
 	var field: = LineEdit.new()
 	field.text = default_value
-	field.custom_minimum_size.x = 240
+	field.custom_minimum_size = Vector2(320, 36)
 	field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(field)
 	return field
@@ -271,6 +278,7 @@ func _refresh() -> void:
 	# goes nowhere and it just looks broken.
 	var seated: bool = online and Net.my_slot() >= 0
 	ready_button.disabled = not seated
+	ready_button.visible = seated
 	if seated:
 		ready_button.set_pressed_no_signal(
 			bool(Net.players.get(Net.my_id(), {}).get("ready", false)))

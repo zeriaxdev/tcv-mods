@@ -17,6 +17,9 @@ The game project and assets are supplied locally; they are not test fixtures in 
 - Native menu navigation, return behavior and layout bounds pass local checks at 1152 × 648.
 - The standalone browser imports and runs against a clean 0.5.3 project without multiplayer hooks or a `Net` service.
 
+- Installed/download searches are case-insensitive and remember each tab’s query.
+- Canceling a stalled local HTTP response returns without blocking the main thread.
+
 ## Still to verify
 
 - Running the Windows installer on Windows.
