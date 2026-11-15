@@ -393,6 +393,7 @@ func _on_start() -> void:
 		return
 	Net.apply_roster_to_metro()
 	M.session_type = M.SESSION_TYPE.STANDARD
+	_come_back_here()
 	M.world.CreateSameLobby([])
 
 
@@ -403,7 +404,15 @@ func _on_start_dub() -> void:
 		return
 	Net.apply_roster_to_metro()
 	M.session_type = M.SESSION_TYPE.VIDEO_DUB
+	_come_back_here()
 	M.world.return_to_dub_selection()
+
+
+# the clip pages take their Back target from Metro, which the game only fills
+# in on the Player Count page. starting from here it was empty, and Back
+# loaded nothing and left a blank screen.
+func _come_back_here() -> void:
+	Metro.clip_selection_page_back_path = scene_file_path
 
 
 func _on_error(reason: String) -> void:
