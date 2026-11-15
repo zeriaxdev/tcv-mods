@@ -132,9 +132,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-mods", action="store_true", help="build the plain game without any mods")
     parser.add_argument("--icon", type=Path, help="Optional local .icns file; no icon is included in this repository")
     parser.add_argument("--output", type=Path, default=ROOT / "work" / "The Choicer Voicer.app")
+    parser.add_argument("--i-own-the-game", action="store_true", help="confirm you own a copy bought on itch.io (asked otherwise)")
     args = parser.parse_args(argv)
     if sys.platform != "darwin":
         raise ValueError("This builder runs on macOS")
+    # Not a purchase check (nothing offline can prove that); the tool is only for people who bought the game.
+    print("This builds a Mac app from your own copy of The Choicer Voicer. It doesn't include or download the game.")
+    print("Buy it at https://yeahmaybe.itch.io/the-choicer-voicer")
+    if not args.i_own_the_game:
+        if not sys.stdin.isatty():
+            raise ValueError("Confirm that you own the game: add --i-own-the-game")
+        if input("Do you own a copy of The Choicer Voicer bought on itch.io? [y/N] ").strip().lower() not in ("y", "yes"):
+            raise ValueError("This builder is only for people who own the game")
     output = args.output.expanduser().resolve()
     if output.exists() or output.suffix != ".app":
         raise ValueError("Choose a new .app output path; existing files are never overwritten")

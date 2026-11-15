@@ -836,53 +836,18 @@ def powershell(script: str, timeout: int = 30) -> str:
     return proc.stdout.strip()
 
 
-def defender_exclusions() -> list[str]:
-    raw = powershell("(Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath -join '|'")
-    return [p for p in raw.split("|") if p]
-
-
-def add_defender_exclusion(folder: Path) -> bool:
-    """Asks Windows to elevate (one UAC prompt) and adds the exclusion itself,
-    so most people never hit the "the export produced no file" failure at all
-    instead of only being told how to fix it after Defender has already deleted
-    a build. Best-effort: a declined UAC prompt or a non-admin account just
-    means the reactive fallback in explain_missing_export() still applies."""
-    exe = shutil.which("powershell") or shutil.which("pwsh")
-    if not exe:
-        return False
-    inner = f"Add-MpPreference -ExclusionPath '{folder}'"
-    try:
-        subprocess.run(
-            [exe, "-NoProfile", "-Command",
-             f"Start-Process powershell -Verb RunAs -Wait -ArgumentList "
-             f"'-NoProfile -Command \"{inner}\"'"],
-            capture_output=True, text=True, errors="replace", timeout=60)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return str(folder) in defender_exclusions()
-
-
-def offer_defender_exclusion(folder: Path) -> None:
-    if not sys.stdin.isatty() or not realtime_protection_on():
+def confirm_ownership(confirmed: bool) -> None:
+    """Not a purchase check (nothing offline can prove that), but the tool is only
+    meant for people who bought the game, and it says so before doing anything."""
+    print("\nThis builds a modded copy of The Choicer Voicer from your own copy of the game.")
+    print("It doesn't include or download the game. Buy it at https://yeahmaybe.itch.io/the-choicer-voicer")
+    if confirmed:
         return
-    if str(folder) in defender_exclusions():
-        return
-    print("\nWindows Defender is on, and it's the single most common reason this")
-    print("installer fails: it quarantines the freshly built exe the instant Godot")
-    print(f"renames it, in {folder}. I can add a Defender exclusion for that folder")
-    print("now -- one UAC prompt -- and the build should just work. Say no and it")
-    print("builds anyway; if Defender does grab it you'll get the same offer again")
-    print("after, with the exact detection.")
-    try:
-        answer = input("\nAdd a Defender exclusion for that folder now? [Y/N] ").strip()
-    except EOFError:
-        return
-    if answer.lower() != "y":
-        return
-    if add_defender_exclusion(folder):
-        say("defender", f"excluded {folder}")
-    else:
-        say("warn", "could not confirm the exclusion went in -- carrying on anyway")
+    if not sys.stdin or not sys.stdin.isatty():
+        raise Failed("confirm that you own the game: add --i-own-the-game")
+    answer = input("Do you own a copy of The Choicer Voicer bought on itch.io? [y/N] ").strip().lower()
+    if answer not in ("y", "yes"):
+        raise Failed("this installer is only for people who own the game")
 
 
 def defender_detections(output: Path) -> list[str]:
@@ -936,14 +901,10 @@ def explain_missing_export(proc: subprocess.CompletedProcess, output: Path) -> N
         print("\nUsually this is antivirus quarantining the new .exe the instant it")
         print("appears. Check whatever scanner you run for a blocked item.")
 
-    folder = output.resolve().parent
-    print("\nTo let it through, open PowerShell as administrator and run:")
-    print(f'  Add-MpPreference -ExclusionPath "{folder}"')
-    print("\nIf Defender already took a copy, release it too:")
-    print("  Start-Process ms-settings:windowsdefender")
-    print("  (Virus & threat protection -> Protection history -> Allow)")
-    print("\nThe exclusion only covers that one folder, and you can drop it again")
-    print(f'afterwards with Remove-MpPreference -ExclusionPath "{folder}".')
+    print("\nTo let just this one file through (no folder exclusions needed):")
+    print("  1. Open Windows Security -> Virus & threat protection -> Protection history.")
+    print(f"  2. Find the entry for {output.name}, open Actions and choose Allow on device.")
+    print("  3. Run Install.bat again.")
 
 
 def export(godot: Path, work: Path, output: Path) -> None:
@@ -1011,6 +972,8 @@ def main(argv: list[str]) -> int:
                     help="where downloads are kept between runs")
     ap.add_argument("--work", default=str(HERE / "work"),
                     help="scratch directory for the decompiled project")
+    ap.add_argument("--i-own-the-game", action="store_true",
+                    help="confirm you own a copy bought on itch.io (asked otherwise)")
     ap.add_argument("--features", help="comma-separated: " + ",".join(FEATURES)
                     + " (default: ask, or all when there is no console)")
     ap.add_argument("--keep-work", action="store_true",
@@ -1047,10 +1010,7 @@ def main(argv: list[str]) -> int:
 
     exe = Path(args.game_exe) if args.game_exe else choose_game_exe()
     check_game_exe(exe)
-
-    exclusion_folders = {work.resolve().parent, Path(args.output).resolve().parent}
-    for folder in exclusion_folders:
-        offer_defender_exclusion(folder)
+    confirm_ownership(args.i_own_the_game)
 
     say("1/5", "getting gdRE Tools")
     gdre = get_gdre(cache, args.gdre)
