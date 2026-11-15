@@ -1,0 +1,27 @@
+--- a/scene/menu/_master/menu_master.gd
++++ b/scene/menu/_master/menu_master.gd
+@@ -45,6 +45,10 @@
+ 	if assume_path: path = "res://scene/menu/" + path + ".tscn"
+ 	if slide_capsule: for el: Node in slide_capsule.get_children(): el.queue_free()
+ 	var current_slide: Control = load(path).instantiate()
++	# every copy of a slide shares one menu_data, and the hint loop below writes
++	# over its "&" markers, so the first visit fixed the breadcrumb for the
++	# whole session (Solo stuck after going Group). work on a copy.
++	current_slide.menu_data = current_slide.menu_data.duplicate()
+ 	match current_slide.menu_data.type:
+ 		MenuData.SLIDETYPE.NORMAL:
+ 			btn_exit.visible = false
+@@ -79,6 +83,13 @@
+ 					M.SESSION_TYPE.TWITCH_PANEL: current_slide.menu_data.slide_hint[i] = "Twitch Panel"
+ 					M.SESSION_TYPE.VIDEO_DUB: current_slide.menu_data.slide_hint[i] = "Dub Mode"
+ 					M.SESSION_TYPE.DUB_FREESTYLE: current_slide.menu_data.slide_hint[i] = "Freestyle Dub Mode"
++	# online there's no Player Count page: Main Menu > Online > Dub Mode.
++	if Net.is_online():
++		var hint: PackedStringArray = current_slide.menu_data.slide_hint
++		for i: int in hint.size():
++			if hint[i] in ["Solo", "Group"]: hint[i] = "Online"
++		if hint.has("Online") and hint.has("Player Count"): hint.remove_at(hint.find("Player Count"))
++		current_slide.menu_data.slide_hint = hint
+ 	slide_hint_path.SetSlides(current_slide.menu_data.slide_hint)
+ 	slide_capsule.add_child(current_slide)
+ 
