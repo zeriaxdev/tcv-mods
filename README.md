@@ -112,11 +112,31 @@ python3 exporter/exporter.py --library
 python3 exporter/exporter.py --export --pack "pack folder" --session "saved session" --output "my dub.mp4"
 ```
 
-On Windows, use `py` instead of `python3`. On macOS you can also build an app window for it, which can back up your packs and dubs to a folder synced by iCloud Drive, Google Drive, Dropbox or a NAS:
+On Windows, use `py` instead of `python3`. On macOS you can also build an app window for it:
 
 ```sh
 python3 exporter/build_app.py --output "$HOME/Applications/Choicer Voicer Exporter.app"
 ```
+
+### Back up your packs and dubs
+
+The exporter copies your packs, saved dubs and exported videos into a folder of your choice. To get them into the cloud, pick a folder that a sync app already uploads: iCloud Drive, Google Drive for desktop, Dropbox, OneDrive or Synology Drive. A NAS or WebDAV share works too once it's connected in Finder (**Go → Connect to Server**) or File Explorer (**Map network drive**). The exporter never signs in to anything itself; the sync app or the network share does the uploading.
+
+In the macOS app:
+
+1. Under **Cloud backup**, click **Choose folder…** and pick a folder inside your synced folder, for example `iCloud Drive/Choicer Voicer Backup`.
+2. Choose what to include: packs, recordings (your saved dubs) and videos (only videos made by the exporter).
+3. Click **Preview backup** to see how many files would be copied, then **Back up now**.
+4. Optional: turn on **Back up automatically after playing**. It checks every two minutes, waits while the game is running, and keeps working after a restart. Keep the app where it is, or the automatic backup stops working; turn the option off to remove it.
+
+On any system, the same backup runs from the command line:
+
+```sh
+python3 exporter/exporter.py --backup "/path/to/synced/folder" --categories packs,recordings,videos \
+  --exports-folder "$HOME/Movies/Choicer Voicer Exports"
+```
+
+Backups only ever add files. Nothing is deleted, unchanged files are skipped, and if a file in the backup differs from yours, both are kept, the backup one renamed with `(conflict-…)`. It's one-way: to restore, copy the folders back into the game's data folder (see below). The backup has `packs_voice` and the other `packs_` folders, `recordings` and `exports`.
 
 ## Where your files are
 
