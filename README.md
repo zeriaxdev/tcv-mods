@@ -12,7 +12,13 @@ The Choicer Voicer is one of the most fun games I've played in a long time, and 
 
 - **Online play.** Host or join a game over the internet or your local network, in Gameshow or Dub Mode.
 - **Community packs.** Search, download and remove GameBanana dub packs from the main menu. ZIP and RAR packs both work, downloads keep going in the background, and slow download servers are skipped automatically.
-- **Save as video** (Mac). When you press **Save Dub**, the button fills up while your dub is turned into an MP4 with your voice mixed in. Click **Open video** to watch it. Needs the [Exporter](https://github.com/zeriaxdev/tcv-exporter).
+- **Save as video.** When you press **Save Dub**, the button fills up while your dub is turned into an MP4 with your voice mixed in. Click **Open video** to watch it. If it fails, click **Retry video**. Works on Windows, macOS and Linux; see [Save as video](#save-as-video) for what it needs.
+
+![Community packs browser inside the game](docs/screenshots/community-packs.jpg)
+
+![Online menu](docs/screenshots/online-menu.jpg)
+
+![The Save Dub button filling up while the video is made](docs/screenshots/save-dub-video.png)
 
 ## Install on Windows
 
@@ -37,7 +43,6 @@ The game only comes out for Windows, so on a Mac you build a native app from the
 
 1. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract it.
 2. Follow the [Mac Builder](https://github.com/zeriaxdev/tcv-macos) guide and add `--mod` with the path to this folder.
-3. Optional: install the [Exporter](https://github.com/zeriaxdev/tcv-exporter) to get **Save as video**.
 
 ## Play online
 
@@ -66,9 +71,41 @@ Open **Community packs** from the main menu.
 
 Want only the pack browser, without online play? Use [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) instead. Pick one of the two mods per build.
 
+## Save as video
+
+The installer puts `exporter.py` next to the game (inside the app on macOS). It needs two free tools:
+
+- **Python 3:** on Windows from [python.org](https://www.python.org/downloads/) (tick **Add python.exe to PATH**). macOS and most Linux systems already have it.
+- **FFmpeg:**
+  - Windows: open Command Prompt and run `winget install Gyan.FFmpeg`, then restart the game.
+  - macOS: `brew install ffmpeg` with [Homebrew](https://brew.sh/).
+  - Linux: install `ffmpeg` with your package manager.
+
+Videos are H.264 MP4s at the pack's own resolution, with a lossless WAV next to each one. Tested on macOS; Windows and Linux use the same code but haven't been tested yet. If the button says **No exporter**, rebuild the game with the latest installer. If it says **Needs Python**, install Python as above.
+
+To export older dubs, or to back up your packs and dubs to iCloud Drive, Google Drive, Dropbox or a NAS, use the [Exporter](https://github.com/zeriaxdev/tcv-exporter).
+
+## Where your files are
+
+The game keeps packs, saved dubs and logs in its data folder:
+
+| System | Folder |
+| --- | --- |
+| Windows | `%APPDATA%\YeahMaybe\ChoicerVoicer` |
+| macOS (built with the [Mac Builder](https://github.com/zeriaxdev/tcv-macos), since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
+| Linux | `~/.local/share/YeahMaybe/ChoicerVoicer` |
+
+Inside it:
+
+- `game/packs_voice`: dub packs, including the ones you download in the game
+- `game/recordings/dub_recordings`: your saved dubs, one folder per pack and session
+- `logs`: the game log, with download and video errors
+
+Videos from **Save Dub** go to `Choicer Voicer Exports` in your Videos folder (`Movies` on macOS).
+
 ## If something goes wrong
 
-- **The game log** is in `%APPDATA%\YeahMaybe\ChoicerVoicer\logs` on Windows and `~/Library/Application Support/YeahMaybe/ChoicerVoicer/logs` on Mac. Download and video errors are written there.
+- **Check the game log** in the `logs` folder above. Download and video errors are written there.
 - **Can't connect:** check the port, the firewall and that everyone runs version 1.1.9. Tailscale avoids most router problems.
 - **Open an issue** with the log attached.
 

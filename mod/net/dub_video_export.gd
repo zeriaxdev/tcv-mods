@@ -5,11 +5,7 @@ extends Node
 
 const OPEN_TEXT := "Open video"
 const RETRY_TEXT := "Retry video"
-const EXPORTERS := [
-	"/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
-	"~/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
-]
-const PYTHONS := ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
+const MAC_PYTHONS := ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
 
 static var last_video: String = ""
 static var _last_args: Array = []  # [pack_path, session, title] of the latest export, for Retry video
@@ -22,21 +18,47 @@ var video: String
 
 static func _first_existing(paths: Array) -> String:
 	for path: String in paths:
-		path = path.replace("~", OS.get_environment("HOME"))
+		if path.begins_with("~/"): path = OS.get_environment("HOME") + path.substr(1)
 		if FileAccess.file_exists(path): return path
 	return ""
 
 
+## The installers put exporter.py next to the game (Windows, Linux) or inside the
+## built app (macOS); the standalone Mac Exporter app is a fallback.
+static func _exporter_script() -> String:
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	return _first_existing([
+		exe_dir.path_join("exporter.py"),
+		exe_dir.path_join("../Resources/exporter.py").simplify_path(),
+		"/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
+		"~/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
+	])
+
+
+static func _python() -> String:
+	var found: Array = []
+	match OS.get_name():
+		"macOS":
+			return _first_existing(MAC_PYTHONS)
+		"Windows":
+			for name: String in ["py", "python"]:  # py = the python.org launcher
+				if OS.execute("where", [name], found) == 0: return name
+			return ""
+		_:
+			return "python3" if OS.execute("which", ["python3"], found) == 0 else ""
+
+
 ## Starts the export; returns false (and says why on the button) when it cannot run.
 static func start(save_button: Control, pack_path: String, session: String, title: String) -> bool:
-	if OS.get_name() != "macOS": return false
 	_last_args = [pack_path, session, title]
-	var script := _first_existing(EXPORTERS)
-	var python := _first_existing(PYTHONS)
+	var script := _exporter_script()
+	var python := _python()
 	if script.is_empty() or python.is_empty():
-		_label(save_button, "No exporter")
+		_label(save_button, "No exporter" if script.is_empty() else "Needs Python")
 		return false
-	var folder := OS.get_environment("HOME").path_join("Movies/Choicer Voicer Exports")
+	var videos := OS.get_system_dir(OS.SYSTEM_DIR_MOVIES)  # Movies on macOS, Videos elsewhere
+	if videos.is_empty(): videos = OS.get_environment("HOME").path_join("Videos")
+	var folder := videos.path_join("Choicer Voicer Exports")
 	DirAccess.make_dir_recursive_absolute(folder)
 	var base := folder.path_join(("%s — %s" % [title, session]).validate_filename())
 	var output := base + ".mp4"
@@ -48,9 +70,9 @@ static func start(save_button: Control, pack_path: String, session: String, titl
 	job.button = save_button
 	job.video = output
 	job.log_path = ProjectSettings.globalize_path("user://dub_video_export_%d.log" % Time.get_ticks_usec())
-	# sh only redirects output to the log; every value is passed as an argument, never spliced into the command.
-	job.pid = OS.create_process("/bin/sh", ["-c", 'exec "$0" -u "$1" --export --pack "$2" --session "$3" --output "$4" > "$5" 2>&1',
-		python, script, pack_path.trim_suffix("/"), session, output, job.log_path])
+	# No shell: every value is its own argument, and the exporter writes its progress to --events.
+	job.pid = OS.create_process(python, ["-u", script, "--export", "--pack", pack_path.trim_suffix("/"),
+		"--session", session, "--output", output, "--events", job.log_path])
 	if job.pid <= 0:
 		job.free()
 		_label(save_button, "Video failed")

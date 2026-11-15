@@ -981,6 +981,8 @@ def main(argv: list[str]) -> int:
     say("5/5", "building")
     output = Path(args.output)
     export(godot, work, output)
+    # Save Dub runs this next to the game to make the video (needs Python and FFmpeg).
+    shutil.copy2(HERE / "tools" / "exporter.py", output.parent / "exporter.py")
 
     if not args.keep_work:
         shutil.rmtree(work, ignore_errors=True)
