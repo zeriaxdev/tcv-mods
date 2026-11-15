@@ -234,6 +234,7 @@ func _build_roster(body: Control) -> void:
 	ready_button = _check_button("Ready")
 	ready_button.toggled.connect(func(on: bool): Net.set_ready(on))
 	_roster_body.add_child(ready_button)
+	_build_mic_test(_roster_body)
 	var play_actions := HBoxContainer.new()
 	play_actions.add_theme_constant_override("separation", 12)
 	_roster_body.add_child(play_actions)
@@ -472,3 +473,65 @@ func _refresh() -> void:
 				+ "Standard mode only cares if the host picks clips from one of these packs. "
 				+ "For Dub Mode, a missing selected pack is okay: enable experimental pack sharing, "
 				+ "let everyone accept and verify it, then begin the dub.") % "; ".join(mismatched)
+
+
+### mic test ###################################################################
+# A level meter under Ready, so everyone can see their microphone works before
+# a round. Listens on its own silent bus (volume -80 dB, after the capture
+# effect), and stops when the Online menu closes.
+
+const MIC_TEST_BUS := "TCVMicTest"
+var _mic_bar: ProgressBar
+var _mic_player: AudioStreamPlayer
+var _mic_capture: AudioEffectCapture
+
+
+func _build_mic_test(parent: Control) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var label := Label.new()
+	label.text = "Mic"
+	row.add_child(label)
+	_mic_bar = ProgressBar.new()
+	_mic_bar.show_percentage = false
+	_mic_bar.max_value = 1.0
+	_mic_bar.custom_minimum_size = Vector2(220, 14)
+	_mic_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_mic_bar.tooltip_text = "Talk: the bar should move. If it doesn't, check your microphone in Settings."
+	row.add_child(_mic_bar)
+	parent.add_child(row)
+	_start_mic_test()
+
+
+func _start_mic_test() -> void:
+	if _mic_player != null or not ProjectSettings.get_setting("audio/driver/enable_input", false): return
+	if AudioServer.get_bus_index(MIC_TEST_BUS) == -1:
+		AudioServer.add_bus()  # added last, so the game's own bus indexes don't move
+		var bus := AudioServer.bus_count - 1
+		AudioServer.set_bus_name(bus, MIC_TEST_BUS)
+		AudioServer.set_bus_volume_db(bus, -80.0)
+		AudioServer.add_bus_effect(bus, AudioEffectCapture.new())
+	var index := AudioServer.get_bus_index(MIC_TEST_BUS)
+	_mic_capture = AudioServer.get_bus_effect(index, 0) as AudioEffectCapture
+	_mic_player = AudioStreamPlayer.new()
+	_mic_player.stream = AudioStreamMicrophone.new()
+	_mic_player.bus = MIC_TEST_BUS
+	add_child(_mic_player)
+	_mic_player.play()
+
+
+func _process(_delta: float) -> void:
+	if _mic_capture == null or _mic_bar == null: return
+	var frames := _mic_capture.get_frames_available()
+	var peak := 0.0
+	if frames > 0:
+		for frame: Vector2 in _mic_capture.get_buffer(frames):
+			peak = maxf(peak, maxf(absf(frame.x), absf(frame.y)))
+	_mic_bar.value = maxf(clampf(peak * 2.0, 0.0, 1.0), _mic_bar.value * 0.85)  # quick rise, slow fall
+
+
+func _exit_tree() -> void:
+	if _mic_player != null:
+		_mic_player.stop()
+	var index := AudioServer.get_bus_index(MIC_TEST_BUS)
+	if index == AudioServer.bus_count - 1: AudioServer.remove_bus(index)
