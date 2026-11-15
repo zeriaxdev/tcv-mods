@@ -103,7 +103,7 @@ func _start_download(url: String, path: String) -> Error:
 	_received = 0
 	_busy = true
 	_thread = Thread.new()
-	var error: Error = _thread.start(_download_worker.bind(url, ProjectSettings.globalize_path(path), MAX_ARCHIVE_BYTES))
+	var error: Error = _thread.start(_download_worker.bind(url, ProjectSettings.globalize_path(path), MAX_ARCHIVE_BYTES, int(_file.get("size", 0))))
 	if error != OK:
 		_thread = null
 		return error
@@ -129,14 +129,40 @@ static func _split_url(url: String) -> Dictionary:
 	return {"tls": tls, "host": host, "port": port, "path": path, "origin": scheme + authority}
 
 
+# GameBanana's /dl link redirects to a random mirror, and some mirrors are slow:
+# filecache35 served ~0.6 MB/s while filecache20 served 15-18 MB/s for the same
+# file. If a connection is slow after a few seconds, ask /dl again for another
+# mirror and resume where it stopped (the mirrors accept byte ranges).
+const SLOW_MIRROR_BYTES_PER_SECOND: int = 2 * 1024 * 1024
+const MIRROR_PROBE_MS: int = 3000
+const MAX_MIRROR_SWITCHES: int = 8
+const MIN_REMAINING_TO_SWITCH: int = 3 * 1024 * 1024
+
+
 # Runs on the worker thread. Returns {} on success or {"error": message}.
-func _download_worker(url: String, path: String, limit: int) -> Dictionary:
+func _download_worker(url: String, path: String, limit: int, total: int = 0) -> Dictionary:
 	var out: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if out == null: return {"error": "Could not write the download file."}
+	var switches: int = 0
+	while true:
+		var result: Dictionary = _download_attempt(url, out, limit, total, switches < MAX_MIRROR_SWITCHES)
+		if result.get("switch_mirror", false):
+			switches += 1
+			continue
+		out.close()
+		return result
+	return {}
+
+
+func _download_attempt(url: String, out: FileAccess, limit: int, total: int, may_switch: bool) -> Dictionary:
 	var headers: PackedStringArray = [
 		"Accept: application/octet-stream",
 		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
 	]
+	if _received > 0: headers.append("Range: bytes=%d-" % _received)  # resume on the new mirror
+	var body_started: int = -1
+	var connection_bytes: int = 0
+	var probed: bool = false
 	for _hop: int in MAX_REDIRECTS + 1:
 		var target: Dictionary = _split_url(url)
 		if target.is_empty(): return {"error": "The download URL is not valid."}
@@ -181,21 +207,35 @@ func _download_worker(url: String, path: String, limit: int) -> Dictionary:
 				if code < 200 or code >= 300:
 					client.close()
 					return {"error": "GameBanana returned HTTP %d for the archive." % code}
+				if code == 200 and _received > 0:  # this mirror ignored the range: start over
+					out.seek(0)
+					_received = 0
 			if status == HTTPClient.STATUS_BODY:
+				if body_started < 0: body_started = Time.get_ticks_msec()
 				var chunk: PackedByteArray = client.read_response_body_chunk()
 				if chunk.is_empty():
 					OS.delay_usec(1000)
 				else:
 					out.store_buffer(chunk)
 					_received += chunk.size()
+					connection_bytes += chunk.size()
 					last_activity = Time.get_ticks_msec()
 					if _received > limit:
 						client.close()
 						return {"error": "This archive is larger than the 1 GB safety limit."}
+				var elapsed: int = Time.get_ticks_msec() - body_started
+				if may_switch and not probed and elapsed >= MIRROR_PROBE_MS:
+					probed = true
+					var remaining: int = (total - _received) if total > 0 else limit
+					var speed: int = connection_bytes * 1000 / elapsed
+					var slow: bool = speed < SLOW_MIRROR_BYTES_PER_SECOND and remaining > MIN_REMAINING_TO_SWITCH
+					print("Community pack download: %s at %.1f MB/s%s" % [target["host"], speed / 1e6, ", trying another mirror" if slow else ""])
+					if slow:
+						client.close()
+						return {"switch_mirror": true}
 				continue
 			if checked and status in [HTTPClient.STATUS_CONNECTED, HTTPClient.STATUS_DISCONNECTED]:
 				client.close()
-				out.close()
 				return {}
 			OS.delay_usec(1000)
 	return {"error": "GameBanana redirected too many times."}
