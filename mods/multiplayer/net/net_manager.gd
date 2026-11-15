@@ -294,6 +294,8 @@ func _wire_signals() -> void:
 func _relax_timeout(id: int) -> void:
 	var enet: = multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if enet == null: return
+	# a client only has a link to the host; other players come through it.
+	if not is_host() and id != 1: return
 	var link: ENetPacketPeer = enet.get_peer(id)
 	if link == null: return
 	link.set_timeout(PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MIN, PEER_TIMEOUT_MAX)
