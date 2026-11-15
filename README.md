@@ -2,6 +2,8 @@
 
 Online multiplayer, an in-game dub pack browser and video saving for The Choicer Voicer.
 
+Also on [GameBanana](https://gamebanana.com/mods/741068).
+
 ![Community packs browser inside the game](docs/screenshots/community-packs.jpg)
 
 ## Table of Contents
