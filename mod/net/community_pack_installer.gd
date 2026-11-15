@@ -46,10 +46,15 @@ var _received: int = 0
 
 func _ready() -> void:
 	set_process(false)
-	# Downloads never resume across launches, so any partial file here is a leftover.
+	# Downloads never resume across launches, so an old partial file is a leftover.
+	# Only files untouched for 10 minutes: a second running copy of the game (local
+	# multiplayer testing) may be writing a fresh one right now.
+	var now: int = int(Time.get_unix_time_from_system())
 	for leftover: String in DirAccess.get_files_at(DOWNLOAD_ROOT):
-		if leftover.ends_with(".part") or leftover.ends_with(".converted.zip"):
-			DirAccess.remove_absolute(DOWNLOAD_ROOT.path_join(leftover))
+		var path: String = DOWNLOAD_ROOT.path_join(leftover)
+		if (leftover.ends_with(".part") or leftover.ends_with(".converted.zip")) \
+			and now - FileAccess.get_modified_time(path) > 600:
+			DirAccess.remove_absolute(path)
 
 
 func _process(_delta: float) -> void:
@@ -282,6 +287,7 @@ func _finish_download() -> void:
 
 
 func _fail(message: String) -> void:
+	push_warning("Community pack %s failed: %s" % [str(_file.get("name", "download")), message])  # lands in the game log
 	_busy = false
 	set_process(false)
 	_join_worker()

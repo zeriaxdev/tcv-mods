@@ -4,6 +4,7 @@ extends Node
 ## Lives on the scene root so leaving dub mode does not stop the export.
 
 const OPEN_TEXT := "Open video"
+const RETRY_TEXT := "Retry video"
 const EXPORTERS := [
 	"/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
 	"~/Applications/Choicer Voicer Exporter.app/Contents/Resources/exporter.py",
@@ -11,6 +12,7 @@ const EXPORTERS := [
 const PYTHONS := ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
 
 static var last_video: String = ""
+static var _last_args: Array = []  # [pack_path, session, title] of the latest export, for Retry video
 
 var button: Control
 var pid: int = -1
@@ -28,6 +30,7 @@ static func _first_existing(paths: Array) -> String:
 ## Starts the export; returns false (and says why on the button) when it cannot run.
 static func start(save_button: Control, pack_path: String, session: String, title: String) -> bool:
 	if OS.get_name() != "macOS": return false
+	_last_args = [pack_path, session, title]
 	var script := _first_existing(EXPORTERS)
 	var python := _first_existing(PYTHONS)
 	if script.is_empty() or python.is_empty():
@@ -57,11 +60,17 @@ static func start(save_button: Control, pack_path: String, session: String, titl
 	return true
 
 
-## Opens the finished video when the save button shows "Open video". Returns true if it did.
+## Handles a click on the save button after an export: opens the finished video, or
+## retries a failed export from the already-saved takes. Returns true if it handled the click.
 static func open_from(save_button: Control) -> bool:
-	if not _label_is(save_button, OPEN_TEXT) or last_video.is_empty(): return false
-	OS.shell_open(last_video)
-	return true
+	if _label_is(save_button, OPEN_TEXT) and not last_video.is_empty():
+		OS.shell_open(last_video)
+		return true
+	if _label_is(save_button, RETRY_TEXT) and _last_args.size() == 3:
+		if save_button.has_method("enable"): save_button.enable(false)
+		start(save_button, _last_args[0], _last_args[1], _last_args[2])
+		return true
+	return false
 
 
 static func _label(target: Control, text: String) -> void:
@@ -117,10 +126,11 @@ func _poll() -> void:
 	if event.get("type") == "result" and FileAccess.file_exists(video):
 		last_video = video
 		_label(button, OPEN_TEXT)
-		if is_instance_valid(button) and button.has_method("enable"): button.enable(true)
+		DirAccess.remove_absolute(log_path)  # failure logs are kept for diagnosis
 	else:
 		push_warning("Dub video export failed: %s (log: %s)" % [event.get("message", "unknown error"), log_path])
-		_label(button, "Video failed")
+		_label(button, RETRY_TEXT)  # the takes are saved; a click re-runs only the export
+	if is_instance_valid(button) and button.has_method("enable"): button.enable(true)
 	queue_free()
 
 
@@ -130,6 +140,7 @@ func _latest_event() -> Dictionary:
 	if file == null: return {}
 	var latest: Dictionary = {}
 	for line: String in file.get_as_text().split("\n", false):
+		if not line.begins_with("{"): continue  # Python/FFmpeg noise; avoids JSON errors in the game log
 		var parsed: Variant = JSON.parse_string(line)
 		if parsed is Dictionary: latest = parsed
 	return latest
