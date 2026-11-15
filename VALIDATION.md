@@ -24,10 +24,11 @@ The game project and assets are supplied locally; they are not test fixtures in 
 - A real GameBanana RAR pack (RAR5) installs through the same safety checks as ZIPs.
 - Leftover partial downloads older than 10 minutes are removed at startup; download failures are written to the game log.
 - Save Dub exports a real saved dub to MP4 in about 5 s on macOS, the button fills with the progress, and a failed export offers Retry video.
+- The Windows installer keeps the game's own engine (4.4.1 custom build): a modded Windows build exported on macOS with it runs the custom engine and carries the modded data.
 
 ## Still to verify
 
-- Running the Windows installer on Windows.
+- Running the Windows installer on Windows, and microphone recording in the resulting build.
 - Save Dub on Windows and Linux, and RAR packs on Windows (`tar.exe`).
 - Completing a multiplayer round between macOS and Windows.
 - Microphone device changes during a running game. Restarting may be necessary after changing inputs.

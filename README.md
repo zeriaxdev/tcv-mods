@@ -28,7 +28,7 @@ This repository started as a fork of [Appolo's multiplayer mod](https://github.c
 | Feature | What it does | Needs |
 | --- | --- | --- |
 | **Community Packs** | Search, download and remove GameBanana dub packs from the main menu. ZIP and RAR packs both work, downloads keep going in the background, and slow download servers are skipped. | Always included |
-| **Multiplayer** | Host or join Gameshow and Dub Mode online, and share packs with the players in your lobby. | Community Packs |
+| **Multiplayer** | Host or join Gameshow and Dub Mode online, and share packs with the players in your lobby. Includes the fix for silent mic recordings on Windows. | Community Packs |
 | **Save as video** | **Save Dub** also turns your dub into an MP4 with your voice mixed in. The button fills up while it works, then says **Open video**. | Python 3 and FFmpeg |
 
 ![Online menu](docs/screenshots/online-menu.jpg)
@@ -164,6 +164,7 @@ install_mod.py         Windows installer (Install.bat runs it)
 
 - **TypeOneAppolo (Appolo)** made the original multiplayer mod this repository is forked from. [Support Appolo on Ko-fi](https://ko-fi.com/appolodev).
 - **Herjuus** wrote the original community pack browser, download queue, installer and host pack sync.
+- **Melvin-Molder** found the Windows microphone fix ([upstream PR #29](https://github.com/TypeOneAppolo/tcv-multiplayer-mod/pull/29)): the installer keeps the game's own engine, so recordings aren't silent.
 - **YeahMaybe** made The Choicer Voicer.
 - [Godot](https://godotengine.org/), [GDRETools](https://github.com/GDRETools/gdsdecomp) and [FFmpeg](https://ffmpeg.org/) are separate projects with their own licenses.
 

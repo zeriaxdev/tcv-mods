@@ -758,10 +758,15 @@ func _rpc_start_match(sid: int, clip_paths: PackedStringArray) -> void:
 # person who still owns the mic they picked; online it is everyone. Check it the
 # way the game's own device dropdown does.
 func use_configured_microphone() -> void:
+	var devices: PackedStringArray = AudioServer.get_input_device_list()
+	if devices.is_empty():
+		log_net("no microphone input devices are available")
+		return
 	var wanted: String = Profile.audio_device_in
-	if not AudioServer.get_input_device_list().has(wanted):
-		log_net("microphone '%s' is not on this machine, falling back to Default" % wanted)
-		wanted = "Default"
+	if not devices.has(wanted):
+		var fallback: String = "Default" if devices.has("Default") else devices[0]
+		log_net("microphone '%s' is not available, falling back to '%s'" % [wanted, fallback])
+		wanted = fallback
 	if AudioServer.input_device == wanted: return
 	AudioServer.input_device = wanted
 	log_net("microphone set to '%s'" % wanted)
@@ -1719,6 +1724,12 @@ func _input(event: InputEvent) -> void:
 
 
 func _ready() -> void:
+	# Upstream PR #29: pick a working mic at startup and log what the game sees,
+	# so a silent recording can be diagnosed from the log.
+	use_configured_microphone()
+	log_net("microphone devices=%s; profile='%s'; active='%s'; input_enabled=%s" % [
+		str(AudioServer.get_input_device_list()), Profile.audio_device_in,
+		AudioServer.input_device, str(ProjectSettings.get_setting("audio/driver/enable_input", false))])
 	community_pack_downloads = CommunityPacks.downloads
 	pack_sync = preload("res://net/pack_sync.gd").new()
 	pack_sync.name = "PackSync"

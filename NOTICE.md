@@ -2,6 +2,7 @@
 
 - Original multiplayer mod: Copyright (c) 2026 TypeOneAppolo, MIT license. Source: https://github.com/TypeOneAppolo/tcv-multiplayer-mod. This repository is a fork of it.
 - Original community pack browser, download queue, installer and host pack sync: contributed to that project by Herjuus under the same license.
+- Windows microphone fix (keeping the game's own engine, and microphone selection at startup): ported from Melvin-Molder's pull request #29 to that project, same license.
 - Everything added in this fork, including the exporter and the Mac builder: Copyright (c) 2026 zeriaxdev, MIT license.
 - The Choicer Voicer, its code, art, audio and fonts: copyright YeahMaybe. None of it is included here. The patch files quote short parts of the game's scripts only to locate where changes go.
 - A game built with these tools contains YeahMaybe's work. Do not share it.
