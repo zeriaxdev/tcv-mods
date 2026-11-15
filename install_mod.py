@@ -989,7 +989,7 @@ def main(argv: list[str]) -> int:
     print(f"\nDone -> {output.resolve()}  ({size // 1048576} MB)")
     print("Launch it, press F9 on the main menu to open the online lobby.")
     print("Everyone you play with needs to build this same version themselves.")
-    print("Original multiplayer/installer: TypeOneAppolo. Native menu fork: zeriaxdev.")
+    print("Based on Appolo's mod. Support: https://ko-fi.com/appolodev")
     return 0
 
 

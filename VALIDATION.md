@@ -1,9 +1,26 @@
-# Validation
+# Testing and compatibility
 
-Run Godot 4.4.1 against your own local recovered/patched game, with a test script under tests/ passed to --script.
+## Run the regression checks
 
-The cancellation and rapid-selection repros failed before the fixes and pass afterward. Native menu state, return navigation, and 1152×648 bounds checks pass. Community Packs was also recovered/applied/imported and tested against a clean 0.5.3 game with no Net autoload or multiplayer hooks.
+Use Godot 4.4.1 with a local recovered game project containing the mod. Pass each script in `tests/` through `--script`, for example:
 
-The user's video showed successful local hosting; it did not demonstrate a cross-platform round. Physical audio-device switching and a Windows installer run remain unverified.
+```sh
+Godot --headless --path /path/to/patched-game \
+  --script /path/to/this-project/tests/repro_catalog.gd
+```
 
-The captured user recording, screenshots, logs, game source, assets, packs and saves are deliberately outside these repositories. Tests use synthetic data.
+The game project and assets are supplied locally; they are not test fixtures in this repository.
+
+## Verified
+
+- Cancellation and rapid selection do not apply stale catalog responses.
+- Native menu navigation, return behavior and layout bounds pass local checks at 1152 × 648.
+- The standalone browser imports and runs against a clean 0.5.3 project without multiplayer hooks or a `Net` service.
+
+## Still to verify
+
+- Running the Windows installer on Windows.
+- Completing a multiplayer round between macOS and Windows.
+- Microphone device changes during a running game. Restarting may be necessary after changing inputs.
+
+Headless UI checks verify structure and resources; they do not replace visual or multiplayer playtesting.

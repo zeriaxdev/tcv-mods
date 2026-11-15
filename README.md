@@ -1,50 +1,49 @@
-# Choicer Voicer — integrated menus fork
+# Choicer Voicer Multiplayer
 
-Unofficial multiplayer and Community Packs menu changes by **zeriaxdev**, based on [TypeOneAppolo / Appolo's multiplayer mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod).
+Play The Choicer Voicer online and browse community dub packs without leaving the game.
 
-This folder is the shareable mod source and Windows installer. It is not a copy of the game. Each player supplies their own purchased game. Do not upload the rebuilt Mac app, Windows exe, exported PCK, recovered project, voice packs or recordings with this kit.
+The menus use the game's own buttons, fonts, panels and navigation. Includes Appolo's multiplayer mod and the Community Packs browser.
 
-## Windows friends
+## Install on Windows
 
-1. Download your own **0.5.3 standard Windows** build from [YeahMaybe on itch.io](https://yeahmaybe.itch.io/the-choicer-voicer) and extract it.
-2. Extract this entire kit. Drag the game's original exe onto **Install.bat**. The installer obtains the Godot/GDRE tools and builds a separate modded exe locally. Keep the original game.
-3. Launch the resulting modded exe. Open **Online (F9)** from the main menu. Everyone should use mod **1.1.9 / protocol 8**.
-4. One player hosts on port **7654**. Friends join using the host's reachable address. On Tailscale use its 100.x address; with router forwarding forward **UDP**, not a web/HTTP proxy. Match the port in-game and allow the game through Windows Firewall.
-5. Test the microphone in Settings before playing. Standard mode needs compatible voice packs. Dub Mode pack sharing is experimental; consult UPSTREAM_README.md.
+You need **The Choicer Voicer 0.5.3 standard Windows build** and **Python 3**.
 
-Installation can take several minutes because it reconstructs and exports the game locally. The Windows installer has not been executed on a Windows PC for this fork. A full Mac–Windows match still needs testing.
+1. Download the game from [YeahMaybe on itch.io](https://yeahmaybe.itch.io/the-choicer-voicer) and extract its ZIP.
+2. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract the entire ZIP.
+3. Drag the original game `.exe` onto `Install.bat`.
+4. Wait for the installer to finish, then open the new modded executable.
 
-## What changes
+The installer downloads Godot and GDRETools and builds a separate executable. Start with an unmodified game; keep the original for future updates. If Python is missing, the installer offers installation instructions.
 
-The browser and lobby are MenuBase pages loaded by the game's existing menu_master. The original shell owns the background, breadcrumb, version and return button. The browser reads the game's existing pack-list style and panel materials at runtime. Action controls extend the game's ButtonCV, retaining its palette and sounds. DuruSans and Waukegan are loaded from the user's own game; they are not bundled here.
+For macOS, use [Choicer Voicer for macOS](https://github.com/zeriaxdev/tcv-macos) with this mod.
 
-These are Godot GDScript mods and small scene definitions, not a website or injected native machine code. The installer recovers an editable project from the supplied game, adds the Net autoload and patches game hooks, then exports it. The Mac adaptation similarly uses the recovered game data with a native Godot runtime; it does not use CrossOver. It is not the developer's original source repository.
+## Play online
 
-The UI fork keeps Appolo's multiplayer protocol and pack installer. This repository includes multiplayer and Community Packs together. The separate private `zeriaxdev/tcv-community-packs` repository runs the browser without multiplayer; `zeriaxdev/tcv-macos` builds either package locally.
+1. Open **Online (F9)** from the main menu.
+2. Enter your name. One player chooses **Host**; everyone else enters that player's address and chooses **Join**.
+3. Use the same port on every computer; the default is **7654**.
+4. Choose your game mode and mark yourself **Ready**.
 
-## Credits and distribution
+Every player needs the same multiplayer protocol: **version 1.1.9, protocol 8**. Use a reachable host address: a local address on the same network, a Tailscale address, or a public address with **UDP 7654** forwarded to the host. Allow the game through the firewall.
 
-- **YeahMaybe**: The Choicer Voicer and all original game content. No affiliation or endorsement is claimed.
-- **TypeOneAppolo / Appolo**: original multiplayer mod, browser, networking and installer, under the preserved MIT LICENSE.
-- **zeriaxdev**: this fork's integrated menu changes and Mac adaptation work.
-- **Godot Engine** and **GDRETools**: tools used by the installer; see upstream README and the tools' own licenses.
+Dub Mode can offer packs to other players before a round. Each recipient must accept the download. See the [upstream guide](UPSTREAM_README.md) for gameplay and pack-sharing details.
 
-The MIT license permits modification/distribution of the mod while requiring its copyright and permission notices to remain. It does not grant rights to redistribute the purchased game. See [MIT terms](https://opensource.org/license/mit) and LICENSE.
+## Community packs
 
-Action icons, including the supplied GameBanana SVG, are omitted from this revision. No logo artwork is distributed in this kit. Installed packs and downloads use the same native list/detail page as browsing; their former card popups are removed. The inherited Discord/support UI is removed, so this fork does not send users to Appolo for support.
+Open **Community packs** from the main menu to search GameBanana, install dub packs and manage downloads. **Installed packs** lists packs managed by the browser. Removing a pack requires confirmation; manually installed folders are left alone.
 
-Keep any GitHub repository **private** for now. The source repositories are private under zeriaxdev. Before a public release, confirm the game's modding/reconstruction policy with the developer; this kit is not a legal clearance for the game or community pack content.
+This mod already includes the browser. Install [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) separately only if you want the browser without multiplayer.
 
-## Source map
+## Development and compatibility
 
-- `mod/net/community_pack_browser.gd` and `.tscn`: pack page and operations.
-- `mod/net/lobby.gd` and `.tscn`: online page and existing lobby actions.
-- `mod/net/choicer_button.gd`: thin adapter around the game's ButtonCV.
-- `mod/net/choicer_style.gd`: runtime native styles and contrast fixes.
-- `mod/net/net_manager.gd` and `mod/patches/`: navigation and game hooks.
+The installer adds GDScript modules and targeted game hooks to a locally recovered project, then exports it with Godot. Game resources are loaded from the installed game, rather than included in the mod.
 
-See UPSTREAM_README.md for the original installation details, troubleshooting, features and author links. Credits there describe the upstream mod, not ownership by this fork.
+See [testing and compatibility](VALIDATION.md) for checks and current limitations. The Windows installer and a complete Mac–Windows match still need testing for this fork.
 
-## Validation
+## Credits and license
 
-Regression scripts under `tests/` run locally with Godot 4.4.1 against your own recovered/patched project, for example `Godot --headless --path /your/local/project --script /path/to/tests/repro_catalog.gd`. They test cancellation, selection and native navigation; no paid game is uploaded to CI.
+Based on [Appolo's multiplayer mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod). The original multiplayer, pack browser and installer are by **TypeOneAppolo / Appolo**. [Support Appolo on Ko-fi](https://ko-fi.com/appolodev).
+
+[The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer) is by YeahMaybe. Build tools: [Godot](https://godotengine.org/) and [GDRETools](https://github.com/GDRETools/gdsdecomp).
+
+Mod code is available under the [MIT license](LICENSE); see [notices](NOTICE.md). Game files and community media are not included. Their rights remain with their respective owners. This is an unofficial mod.
