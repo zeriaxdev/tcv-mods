@@ -58,7 +58,8 @@ func _build_ui() -> void:
 	workspace.add_theme_constant_override("separation", 16)
 	margin.add_child(workspace)
 	_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
-	_tabs.large_buttons = true
+	# Same beveled buttons and size as the game's Settings page selector.
+	_tabs.large_buttons = false
 	_tabs.columns = 1
 	_tabs.custom_minimum_size.x = 224
 	_tabs.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -66,7 +67,9 @@ func _build_ui() -> void:
 	for text: String in ["Connection", "Contestants"]:
 		var tab := GAME_BUTTON.new()
 		tab.text = text
-		tab.custom_minimum_size.y = 72
+		tab.use_small()
+		tab.custom_minimum_size.y = 48
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_tabs.add_child(tab)
 	_tabs.selection.connect(_show_tab)
 	workspace.add_child(_tabs)

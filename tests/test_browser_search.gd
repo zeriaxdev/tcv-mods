@@ -33,9 +33,9 @@ func check_ui():
  assert(browser._list.get_root().get_first_child().get_text(0) == "No matching packs")
  browser._show_downloads()
  assert(browser._search.text == "missing")
- assert(browser._nav_tabs.large_buttons)
+ assert(not browser._nav_tabs.large_buttons)
  for tab in browser._nav_tabs.get_children():
-  if tab.has_method("GradHover"): assert(tab.custom_minimum_size.y >= 72)
+  if tab.has_method("GradHover"): assert(tab.custom_minimum_size.y == 48 and tab.button_type == tab.BUTTONTYPE.SMALL and tab.size_flags_horizontal == Control.SIZE_EXPAND_FILL)
  browser._downloads = original_queue
  fake.free()
  shell.free()

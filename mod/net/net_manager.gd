@@ -1590,12 +1590,9 @@ func _build_the_way_in() -> void:
 	_entry_layer.add_child(_community_entry_button)
 
 	# polled: there is no hook into the game's screen changes, and they all go
-	# through primary_capsule anyway.
-	var ticker: = Timer.new()
-	ticker.wait_time = 0.4
-	ticker.timeout.connect(_place_entry_button)
-	add_child(ticker)
-	ticker.start()
+	# through primary_capsule anyway. Every frame (a few node lookups) so the
+	# buttons appear with the menu instead of up to 0.4 s after it.
+	get_tree().process_frame.connect(_place_entry_button)
 	_place_entry_button()
 
 

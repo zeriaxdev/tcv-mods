@@ -130,21 +130,21 @@ func _build_ui() -> void:
 	navigation.add_theme_constant_override("separation", 12)
 	workspace.add_child(navigation)
 	_nav_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
-	_nav_tabs.large_buttons = true
+	# Same beveled buttons and size as the game's Settings page selector.
+	_nav_tabs.large_buttons = false
 	_nav_tabs.columns = 1
 	_nav_tabs.add_theme_constant_override("v_separation", 12)
 	var browse := _button("Browse packs", false)
 	browse.pressed.connect(_show_browse)
-	browse.custom_minimum_size.y = 72
-	_nav_tabs.add_child(browse)
 	_installed_button = _button("Installed packs", false)
 	_installed_button.pressed.connect(_show_installed)
-	_installed_button.custom_minimum_size.y = 72
-	_nav_tabs.add_child(_installed_button)
 	_downloads_button = _button("Downloads", false)
 	_downloads_button.pressed.connect(_show_downloads)
-	_downloads_button.custom_minimum_size.y = 72
-	_nav_tabs.add_child(_downloads_button)
+	for tab: GAME_BUTTON in [browse, _installed_button, _downloads_button]:
+		tab.use_small()
+		tab.custom_minimum_size.y = 48
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL # fill the 224px column; text changes reset min width
+		_nav_tabs.add_child(tab)
 	navigation.add_child(_nav_tabs)
 	var content := VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -356,7 +356,7 @@ func _build_ui() -> void:
 		if url.begins_with("https://gamebanana.com/"): OS.shell_open(url))
 	detail_buttons.add_child(_open_button)
 	var caution: = Label.new()
-	caution.text = ("Downloads are community content. ZIPs are staged and checked before installation, "
+	caution.text = ("Downloads are community content. ZIP and RAR archives are staged and checked before installation, "
 		+ "but only install packs from creators you trust.")
 	caution.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	caution.add_theme_color_override("font_color", WARNING)
