@@ -139,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
     # Not a purchase check (nothing offline can prove that); the tool is only for people who bought the game.
     print("This builds a Mac app from your own copy of The Choicer Voicer. It doesn't include or download the game.")
     print("Buy it at https://yeahmaybe.itch.io/the-choicer-voicer")
+    if subprocess.run(["/usr/bin/pgrep", "-f", "The Choicer Voicer.app/Contents/MacOS"], capture_output=True).returncode == 0:
+        raise ValueError("Close The Choicer Voicer first, then run the builder again")
+    target = args.output.expanduser().resolve().parent
+    free = shutil.disk_usage(target if target.exists() else Path.home()).free
+    if free < 1_500_000_000:
+        raise ValueError(f"Not enough free disk space: the build needs about 1.5 GB, {free // 1_000_000} MB is free")
     if not args.i_own_the_game:
         if not sys.stdin.isatty():
             raise ValueError("Confirm that you own the game: add --i-own-the-game")
@@ -168,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         run([str(gdre), "--headless", f"--recover={game}", f"--output-dir={project}"], log)
         game_source = project / "common/globals/m.gd"
         if not game_source.exists() or not re.search(r'const\s+GAME_VERSION\s*:\s*String\s*=\s*"0\.5\.3"', game_source.read_text()):
-            raise ValueError("The recovered game is not supported version 0.5.3")
+            raise ValueError("This game file is not version 0.5.3. Download the standard Windows build of 0.5.3 from your itch.io library: https://yeahmaybe.itch.io/the-choicer-voicer")
         repair_paths(project)
         features: list[str] = []
         if not args.no_mods:

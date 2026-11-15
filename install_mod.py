@@ -728,8 +728,9 @@ def detect_version(work: Path) -> str:
 def patch_set_for(version: str, features: list[str]) -> list[Path]:
     if version not in SUPPORTED_VERSIONS:
         raise Failed(
-            f"this build reports version {version}, which the mod does not "
-            f"handle yet.\n  Supported: {', '.join(SUPPORTED_VERSIONS)}.")
+            f"your game is version {version}, but these mods need "
+            f"{', '.join(SUPPORTED_VERSIONS)}.\n  Download the standard Windows build of 0.5.3 from "
+            f"your itch.io library: https://yeahmaybe.itch.io/the-choicer-voicer")
     patches: list[Path] = []
     for feature in features:
         root = MODS / feature / "patches"
@@ -834,6 +835,19 @@ def powershell(script: str, timeout: int = 30) -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return proc.stdout.strip()
+
+
+def preflight(output: Path) -> None:
+    """Cheap checks before anything is downloaded or built."""
+    if os.name == "nt":
+        running = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+        if "thechoicervoicer" in running.lower():
+            raise Failed("close The Choicer Voicer first, then run the installer again")
+    folder = output.resolve().parent
+    free = shutil.disk_usage(folder if folder.exists() else Path.cwd()).free
+    if free < 1_500_000_000:
+        raise Failed(f"not enough free disk space: the build needs about 1.5 GB, "
+                     f"{free // 1_000_000} MB is free on that drive")
 
 
 def confirm_ownership(confirmed: bool) -> None:
@@ -1011,6 +1025,7 @@ def main(argv: list[str]) -> int:
     exe = Path(args.game_exe) if args.game_exe else choose_game_exe()
     check_game_exe(exe)
     confirm_ownership(args.i_own_the_game)
+    preflight(Path(args.output))
 
     say("1/5", "getting gdRE Tools")
     gdre = get_gdre(cache, args.gdre)
