@@ -10,7 +10,7 @@ rem at python.org.
 
 setlocal
 cd /d "%~dp0"
-title The Choicer Voicer - Multiplayer Mod Installer
+title The Choicer Voicer - Mods Installer
 
 rem Running this straight out of the zip or rar, without extracting first, drops
 rem a single copy of the .bat into a temp folder and nothing else, so the script

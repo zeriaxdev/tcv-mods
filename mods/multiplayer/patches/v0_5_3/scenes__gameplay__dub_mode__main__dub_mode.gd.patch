@@ -142,8 +142,7 @@
 @@ -219,7 +330,8 @@
  	lbl_on_clip_number.text = "Finished!"
  	btn_hear_again.enable(false);btn_record.enable(false);btn_refresh_mic.enable(false)
--	btn_watch.enable(true);btn_save_dub.enable(true)
-+	btn_watch.enable(true);btn_save_dub.enable(true);btn_save_dub.get_child(0).text = "Save Dub"
+ 	btn_watch.enable(true);btn_save_dub.enable(true)
 -	dub_finished()
 +	await dub_finished()
 +	_net_finished_dubbing()
@@ -247,16 +246,3 @@
  func _discard_incomplete_session() -> void :
  	resource.clear_incomplete_session()
  	load_last_session_prompt.hide()
-@@ -538,9 +538,12 @@
- func _save_dub() -> void :
-+	if preload("res://net/dub_video_export.gd").open_from(btn_save_dub): return
- 	btn_save_dub.enable(false)
- 	btn_save_dub.get_child(0).text = "Saving..."
- 	dub_save_folder = Time.get_datetime_string_from_system().validate_filename().replace("T", " ")
- 	var target_folder: String = "dub_recordings/" + resource.pack_info.path_from_pack + dub_save_folder + "/"
- 	DirAccess.make_dir_recursive_absolute(FileManager.RECORDINGS + target_folder)
- 	for clip: OmniClipMemberInstance in performance_array: clip.save_recording(target_folder + DUB_RECORD_PREFIX + clip.shared_omniclip.file_name_agnostic + ".wav")
- 	btn_save_dub.get_child(0).text = "Saved!"
- 	ask_for_exit_confirmation = false
-+	# Auto-render the saved dub to MP4; the button shows progress, then "Open video".
-+	preload("res://net/dub_video_export.gd").start(btn_save_dub, resource.pack_info.path_from_pack, dub_save_folder, resource.pack_info.display_name)

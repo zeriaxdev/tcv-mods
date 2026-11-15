@@ -24,7 +24,18 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-MOD = HERE / "mod"
+MODS = HERE / "mods"
+# Each feature is a folder in mods/. Installed in this order; "common" is always included.
+FEATURES = {
+    "community-packs": "Community Packs: browse and download dub packs from GameBanana in the game",
+    "multiplayer": "Online multiplayer: play Gameshow and Dub Mode with friends online",
+    "save-as-video": "Save as video: Save Dub also makes an MP4 of your dub (needs Python and FFmpeg)",
+}
+REQUIRES = {"multiplayer": ["community-packs"]}  # pack sharing uses the pack downloader
+AUTOLOADS = {
+    "community-packs": 'CommunityPacks="*res://net/community_pack_service.gd"',
+    "multiplayer": 'Net="*res://net/net_manager.gd"',
+}
 
 SUPPORTED_VERSIONS = ["0.5.3"]
 GAME_VERSION = " or ".join(SUPPORTED_VERSIONS)
@@ -52,17 +63,16 @@ GDRE_URL = ("https://github.com/GDRETools/gdsdecomp/releases/download/"
 TEMPLATE_MEMBER = "templates/windows_release_x86_64.exe"
 
 EXPORT_PRESET = "Windows Desktop"
-OUTPUT_STEM = "TheChoicerVoicer-Multiplayer"
+OUTPUT_STEM = "TheChoicerVoicer-Mods"
 
 KOFI_URL = "https://ko-fi.com/appolodev"
-ISSUES_URL = "https://github.com/zeriaxdev/tcv-multiplayer/issues"
+ISSUES_URL = "https://github.com/zeriaxdev/tcv-mods/issues"
 
 RUN_LOG_DIR = HERE / "install_logs"
 
 NODE_PATH_RE = re.compile(r'(\$%?[A-Za-z_]\w*)((?:\s*/\s*%?[A-Za-z_]\w*)+)')
 
 AUTOLOAD_ANCHOR = 'Metro="*res://common/globals/metro.gd"'
-AUTOLOAD_LINE = 'CommunityPacks="*res://net/community_pack_service.gd"\nNet="*res://net/net_manager.gd"'
 
 LOG_ANCHOR = "settings/stdout/verbose_stdout=true"
 LOG_LINES = ['file_logging/enable_file_logging=true',
@@ -94,7 +104,7 @@ def mod_version() -> str:
     people compare when one of them can't join the other, and a name that had to
     be kept in step by hand would eventually stop being."""
     try:
-        text = read_text(MOD / "net" / "net_manager.gd")
+        text = read_text(MODS / "multiplayer" / "net" / "net_manager.gd")
     except OSError:
         return ""
     match = re.search(r'const\s+MOD_VERSION\s*:\s*String\s*=\s*"([^"]+)"', text)
@@ -657,10 +667,36 @@ def repair_node_paths(work: Path) -> int:
     return fixed
 
 
-def patch_project_godot(work: Path) -> None:
+def resolve_features(chosen: list[str] | None) -> list[str]:
+    """Every feature by default; adds what a chosen feature depends on; keeps install order."""
+    wanted = set(FEATURES if chosen is None else chosen)
+    unknown = wanted - set(FEATURES)
+    if unknown:
+        raise Failed(f"unknown feature(s): {', '.join(sorted(unknown))}. Choose from: {', '.join(FEATURES)}")
+    for feature in list(wanted):
+        wanted.update(REQUIRES.get(feature, []))
+    return [feature for feature in FEATURES if feature in wanted]
+
+
+def ask_features() -> list[str] | None:
+    """Ask in the console which features to build. None (all) when nobody can answer."""
+    if not sys.stdin or not sys.stdin.isatty():
+        return None
+    print("\nWhich features do you want? Press Enter for yes.")
+    chosen = ["community-packs"]
+    print(f"  {FEATURES['community-packs']}: always included")
+    for feature in ["multiplayer", "save-as-video"]:
+        answer = input(f"  {FEATURES[feature]}? [Y/n] ").strip().lower()
+        if answer in ("", "y", "yes"):
+            chosen.append(feature)
+    return chosen
+
+
+def patch_project_godot(work: Path, features: list[str]) -> None:
     path = work / "project.godot"
     text = read_text(path)
-    if AUTOLOAD_LINE in text:
+    AUTOLOAD_LINE = "\n".join(AUTOLOADS[f] for f in features if f in AUTOLOADS)
+    if AUTOLOADS["community-packs"] in text:
         raise Failed("project.godot already has the Net autoload -- "
                      "this project is already patched")
     if AUTOLOAD_ANCHOR not in text:
@@ -689,18 +725,26 @@ def detect_version(work: Path) -> str:
     return match.group(1)
 
 
-def patch_set_for(version: str) -> list[Path]:
-    version_dir = MOD / "patches" / ("v" + version.replace(".", "_"))
-    if version not in SUPPORTED_VERSIONS or not version_dir.is_dir():
+def patch_set_for(version: str, features: list[str]) -> list[Path]:
+    if version not in SUPPORTED_VERSIONS:
         raise Failed(
             f"this build reports version {version}, which the mod does not "
             f"handle yet.\n  Supported: {', '.join(SUPPORTED_VERSIONS)}.")
-    return sorted((MOD / "patches" / "common").glob("*.patch")) + \
-        sorted(version_dir.glob("*.patch"))
+    patches: list[Path] = []
+    for feature in features:
+        root = MODS / feature / "patches"
+        if not root.is_dir():
+            continue
+        version_dir = root / ("v" + version.replace(".", "_"))
+        if not version_dir.is_dir():
+            raise Failed(f"{feature} does not support game version {version} yet")
+        patches += sorted((root / "common").glob("*.patch")) + sorted(version_dir.glob("*.patch"))
+    return patches
 
 
-def apply_mod(work: Path) -> None:
-    if (work / "net" / "net_manager.gd").exists():
+def apply_mod(work: Path, features: list[str] | None = None) -> list[str]:
+    features = resolve_features(features)
+    if (work / "net" / "community_pack_service.gd").exists():
         raise Failed("this project already contains the mod")
 
     version = detect_version(work)
@@ -708,11 +752,13 @@ def apply_mod(work: Path) -> None:
 
     say("mod", f"repaired {repair_node_paths(work)} decompiler node-path artifacts")
 
-    shutil.copytree(MOD / "net", work / "net", dirs_exist_ok=True)
-    say("mod", "added multiplayer, pack sharing and community pack browser scripts")
+    for folder in ["common"] + features:
+        if (MODS / folder / "net").is_dir():
+            shutil.copytree(MODS / folder / "net", work / "net", dirs_exist_ok=True)
+    say("mod", "added " + ", ".join(features))
 
     count = 0
-    for patch in patch_set_for(version):
+    for patch in patch_set_for(version, features):
         rel = patch.name[: -len(".patch")].replace("__", "/")
         target = work / rel
         if not target.is_file():
@@ -721,9 +767,10 @@ def apply_mod(work: Path) -> None:
         count += 1
     say("mod", f"patched {count} game scripts")
 
-    patch_project_godot(work)
+    patch_project_godot(work, features)
     write_export_preset(work)
-    say("mod", "registered the Net autoload and export preset")
+    say("mod", "registered the autoloads and export preset")
+    return features
 
 
 def write_export_preset(work: Path) -> None:
@@ -731,7 +778,7 @@ def write_export_preset(work: Path) -> None:
     path only matters to a modder who opens the project and hits Export. Stamp
     the version on it there too rather than leaving them the one name that says
     nothing."""
-    text = read_text(MOD / "export_presets.cfg")
+    text = read_text(MODS / "common" / "export_presets.cfg")
     if MOD_VERSION:
         text = text.replace(f'export_path="{OUTPUT_STEM}.exe"',
                             f'export_path="{DEFAULT_OUTPUT}"', 1)
@@ -926,6 +973,8 @@ def main(argv: list[str]) -> int:
                     help="where downloads are kept between runs")
     ap.add_argument("--work", default=str(HERE / "work"),
                     help="scratch directory for the decompiled project")
+    ap.add_argument("--features", help="comma-separated: " + ",".join(FEATURES)
+                    + " (default: ask, or all when there is no console)")
     ap.add_argument("--keep-work", action="store_true",
                     help="do not delete the decompiled project afterwards")
     args = ap.parse_args(argv)
@@ -944,8 +993,8 @@ def main(argv: list[str]) -> int:
             print(f"  {checked}")
         return 0
 
-    if not MOD.is_dir():
-        raise Failed(f"mod/ folder missing next to {Path(__file__).name}")
+    if not MODS.is_dir():
+        raise Failed(f"mods/ folder missing next to {Path(__file__).name}")
 
     cache = Path(args.cache)
     work = Path(args.work)
@@ -954,7 +1003,7 @@ def main(argv: list[str]) -> int:
         work = Path(args.project)
         if not (work / "project.godot").is_file():
             raise Failed(f"{work} is not a Godot project")
-        apply_mod(work)
+        apply_mod(work, args.features.split(",") if args.features else ask_features())
         print(f"\nPatched {work}. Open it in Godot {GODOT_VERSION} and export.")
         return 0
 
@@ -971,8 +1020,8 @@ def main(argv: list[str]) -> int:
     say("2/5", "decompiling your copy of the game")
     decompile(gdre, exe, work)
 
-    say("3/5", "applying the multiplayer mod")
-    apply_mod(work)
+    say("3/5", "applying the mods")
+    features = apply_mod(work, args.features.split(",") if args.features else ask_features())
 
     say("4/5", "getting Godot and export templates")
     godot = get_godot(cache, args.godot)
@@ -981,8 +1030,9 @@ def main(argv: list[str]) -> int:
     say("5/5", "building")
     output = Path(args.output)
     export(godot, work, output)
-    # Save Dub runs this next to the game to make the video (needs Python and FFmpeg).
-    shutil.copy2(HERE / "tools" / "exporter.py", output.parent / "exporter.py")
+    if "save-as-video" in features:
+        # Save Dub runs this next to the game to make the video (needs Python and FFmpeg).
+        shutil.copy2(HERE / "exporter" / "exporter.py", output.parent / "exporter.py")
 
     if not args.keep_work:
         shutil.rmtree(work, ignore_errors=True)

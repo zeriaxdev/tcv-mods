@@ -1,136 +1,172 @@
-# Choicer Voicer Multiplayer
+# tcv-mods
 
-Play [The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer) online with friends, download dub packs from GameBanana without leaving the game, and save every dub as a video.
-
-This is a fork of [Appolo's multiplayer mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod). Everything fits into the game's own menus, buttons and fonts, so it feels like part of the game.
-
-## Why I made this
-
-The Choicer Voicer is one of the most fun games I've played in a long time, and making mods for it has turned into a new passion of mine. If you enjoy these mods, please [buy the game on itch.io](https://yeahmaybe.itch.io/the-choicer-voicer). It's pay-what-you-want, and YeahMaybe deserves every bit of support. None of this would exist without their game.
-
-## What it adds
-
-- **Online play.** Host or join a game over the internet or your local network, in Gameshow or Dub Mode.
-- **Community packs.** Search, download and remove GameBanana dub packs from the main menu. ZIP and RAR packs both work, downloads keep going in the background, and slow download servers are skipped automatically.
-- **Save as video.** When you press **Save Dub**, the button fills up while your dub is turned into an MP4 with your voice mixed in. Click **Open video** to watch it. If it fails, click **Retry video**. Works on Windows, macOS and Linux; see [Save as video](#save-as-video) for what it needs.
+Online multiplayer, an in-game dub pack browser and video saving for The Choicer Voicer.
 
 ![Community packs browser inside the game](docs/screenshots/community-packs.jpg)
+
+## Table of Contents
+
+- [Background](#background)
+- [Features](#features)
+- [Install](#install)
+- [Usage](#usage)
+- [Where your files are](#where-your-files-are)
+- [Troubleshooting](#troubleshooting)
+- [Unofficial project](#unofficial-project)
+- [Contributing](#contributing)
+- [Thanks](#thanks)
+- [License](#license)
+
+## Background
+
+[The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer) is one of the most fun games I've played in a long time, and making mods for it has turned into a new passion of mine. You need your own copy of the game for any of this, so please buy it on itch.io. It costs $5, you can pay more if you like, and YeahMaybe deserves every bit of support. None of this would exist without their game.
+
+This repository started as a fork of [Appolo's multiplayer mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod). It now holds all of my mods for the game in one place, and you choose which ones to install. Everything fits into the game's own menus, buttons and fonts.
+
+## Features
+
+| Feature | What it does | Needs |
+| --- | --- | --- |
+| **Community Packs** | Search, download and remove GameBanana dub packs from the main menu. ZIP and RAR packs both work, downloads keep going in the background, and slow download servers are skipped. | Always included |
+| **Multiplayer** | Host or join Gameshow and Dub Mode online, and share packs with the players in your lobby. | Community Packs |
+| **Save as video** | **Save Dub** also turns your dub into an MP4 with your voice mixed in. The button fills up while it works, then says **Open video**. | Python 3 and FFmpeg |
 
 ![Online menu](docs/screenshots/online-menu.jpg)
 
 ![The Save Dub button filling up while the video is made](docs/screenshots/save-dub-video.png)
 
-## Install on Windows
+## Install
 
-You need:
+You need **The Choicer Voicer 0.5.3**, the standard Windows download from [itch.io](https://yeahmaybe.itch.io/the-choicer-voicer). The installer builds a modded copy from it and never changes your original.
 
-- **The Choicer Voicer 0.5.3**, the standard Windows download from [itch.io](https://yeahmaybe.itch.io/the-choicer-voicer).
-- **Python 3** from [python.org](https://www.python.org/downloads/). In the installer, tick **Add python.exe to PATH**.
+### Windows
 
-Steps:
+1. Install **Python 3** from [python.org](https://www.python.org/downloads/). Tick **Add python.exe to PATH**.
+2. For **Save as video**, also install FFmpeg: open Command Prompt and run `winget install Gyan.FFmpeg`.
+3. Extract the game's ZIP somewhere you'll keep it.
+4. [Download this repository](https://github.com/zeriaxdev/tcv-mods/archive/refs/heads/main.zip) and extract the whole ZIP. Don't run anything from inside the ZIP.
+5. Drag the game's `.exe` onto `Install.bat`.
+6. Answer which features you want. Press Enter to take each one.
+7. Wait while it downloads Godot and GDRETools and builds the game. The first run takes a few minutes.
+8. Open the new `TheChoicerVoicer-Mods` executable next to the original.
 
-1. Extract the game's ZIP somewhere you'll keep it.
-2. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract the whole ZIP. Don't run anything from inside the ZIP.
-3. Drag the game's `.exe` onto `Install.bat`.
-4. Wait while it downloads Godot and GDRETools and builds the modded game. The first run takes a few minutes.
-5. Open the new executable it creates next to the original.
+Keep the original `.exe`. When the game or these mods update, run the installer on the original again.
 
-Keep the original `.exe`. When the game or this mod updates, run the installer on the original again.
+### macOS
 
-## Install on Mac
+The game only comes out for Windows, so on a Mac you build a native app from the Windows download. You need:
 
-The game only comes out for Windows, so on a Mac you build a native app from the Windows download:
+- Python 3.9 or newer, and for **Save as video** FFmpeg: `brew install ffmpeg` with [Homebrew](https://brew.sh/).
+- [Godot 4.4.1 for macOS](https://github.com/godotengine/godot-builds/releases/tag/4.4.1-stable) and the **export templates** from the same page (`Godot_v4.4.1-stable_export_templates.tpz`).
+- [GDRETools 2.6.3 for macOS](https://github.com/GDRETools/gdsdecomp/releases/tag/v2.6.3).
 
-1. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract it.
-2. Follow the [Mac Builder](https://github.com/zeriaxdev/tcv-macos) guide and add `--mod` with the path to this folder.
+Then:
 
-## Play online
+1. Move Godot and GDRETools to **Applications**.
+2. [Download this repository](https://github.com/zeriaxdev/tcv-mods/archive/refs/heads/main.zip) and extract it.
+3. Open Terminal in that folder and run, with your own paths:
+
+```sh
+python3 mac/build.py "/path/to/the-game.zip" \
+  --godot "/Applications/Godot.app" \
+  --gdre "/Applications/Godot RE Tools.app" \
+  --templates "/path/to/Godot_v4.4.1-stable_export_templates.tpz" \
+  --output "$HOME/Applications/The Choicer Voicer.app"
+```
+
+4. Open the new app in your home **Applications** folder and allow microphone access.
+
+All features are included by default. To pick, add for example `--features community-packs,save-as-video`. Add `--icon "/path/to/icon.icns"` for a custom icon. The app is signed on your Mac but not notarized by Apple.
+
+## Usage
+
+### Play online
 
 1. Open **Online (F9)** from the main menu.
 2. Enter your name. One player picks **Host**. Everyone else types the host's address and picks **Join**.
 3. Everyone uses the same port. The default is **7654**.
-4. Pick a game mode and mark yourself **Ready**.
+4. Pick a game mode and mark yourself **Ready**. The modes unlock once a second player joins.
 
-The host's address can be:
+The host's address can be a local address on the same network, a [Tailscale](https://tailscale.com/) address (the easiest way to play over the internet), or the host's public address with **UDP port 7654** forwarded on their router. Allow the game through your firewall when asked. Everyone needs the same version, shown at the bottom of the Online menu.
 
-- a local address, if you're on the same network,
-- a [Tailscale](https://tailscale.com/) address, which is the easiest way to play over the internet,
-- or the host's public address, with **UDP port 7654** forwarded on their router.
+In Dub Mode, the host can offer their packs to the other players before a round, and each player chooses whether to download them. The [original mod's guide](UPSTREAM_README.md) has more on game modes and pack sharing.
 
-Allow the game through your firewall when asked. Everyone needs the same mod version: **1.1.9, protocol 8**. It's shown at the bottom of the Online menu.
-
-In Dub Mode, the host can offer their packs to the other players before a round. Each player chooses whether to download them. The [original mod's guide](UPSTREAM_README.md) has more on game modes and pack sharing.
-
-## Community packs
+### Community packs
 
 Open **Community packs** from the main menu.
 
-- **Browse packs:** search GameBanana or sort by newest or most liked, then pick a file and press **Download**.
+- **Browse packs:** search GameBanana or sort the list, pick a file and press **Download**.
 - **Installed packs:** everything installed through the browser. Removing a pack asks first, and packs you installed by hand are never touched.
-- **Downloads:** progress for each pack in the queue, with a **Cancel** button.
+- **Downloads:** progress for each pack, with a **Cancel** button.
 
-Want only the pack browser, without online play? Use [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) instead. Pick one of the two mods per build.
+### Save as video
 
-## Save as video
+Press **Save Dub** after a dub. The video goes to `Choicer Voicer Exports` in your Videos folder (`Movies` on macOS): an H.264 MP4 at the pack's own resolution, with a lossless WAV next to it. If it fails, the button says **Retry video**. **No exporter** means the game was built without this feature, and **Needs Python** means Python is missing.
 
-The installer puts `exporter.py` next to the game (inside the app on macOS). It needs two free tools:
+### Export older dubs, or back them up
 
-- **Python 3:** on Windows from [python.org](https://www.python.org/downloads/) (tick **Add python.exe to PATH**). macOS and most Linux systems already have it.
-- **FFmpeg:**
-  - Windows: open Command Prompt and run `winget install Gyan.FFmpeg`, then restart the game.
-  - macOS: `brew install ffmpeg` with [Homebrew](https://brew.sh/).
-  - Linux: install `ffmpeg` with your package manager.
+The `exporter` folder works on its own, on every system:
 
-Videos are H.264 MP4s at the pack's own resolution, with a lossless WAV next to each one. Tested on macOS; Windows and Linux use the same code but haven't been tested yet. If the button says **No exporter**, rebuild the game with the latest installer. If it says **Needs Python**, install Python as above.
+```sh
+python3 exporter/exporter.py --library
+python3 exporter/exporter.py --export --pack "pack folder" --session "saved session" --output "my dub.mp4"
+```
 
-To export older dubs, or to back up your packs and dubs to iCloud Drive, Google Drive, Dropbox or a NAS, use the [Exporter](https://github.com/zeriaxdev/tcv-exporter).
+On Windows, use `py` instead of `python3`. On macOS you can also build an app window for it, which can back up your packs and dubs to a folder synced by iCloud Drive, Google Drive, Dropbox or a NAS:
+
+```sh
+python3 exporter/build_app.py --output "$HOME/Applications/Choicer Voicer Exporter.app"
+```
 
 ## Where your files are
-
-The game keeps packs, saved dubs and logs in its data folder:
 
 | System | Folder |
 | --- | --- |
 | Windows | `%APPDATA%\YeahMaybe\ChoicerVoicer` |
-| macOS (built with the [Mac Builder](https://github.com/zeriaxdev/tcv-macos), since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
+| macOS (built with `mac/build.py`, since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
 | Linux | `~/.local/share/YeahMaybe/ChoicerVoicer` |
 
-Inside it:
+Inside it, `game/packs_voice` holds the dub packs, `game/recordings/dub_recordings` your saved dubs, and `logs` the game log.
 
-- `game/packs_voice`: dub packs, including the ones you download in the game
-- `game/recordings/dub_recordings`: your saved dubs, one folder per pack and session
-- `logs`: the game log, with download and video errors
-
-Videos from **Save Dub** go to `Choicer Voicer Exports` in your Videos folder (`Movies` on macOS).
-
-## If something goes wrong
+## Troubleshooting
 
 - **Check the game log** in the `logs` folder above. Download and video errors are written there.
-- **Can't connect:** check the port, the firewall and that everyone runs version 1.1.9. Tailscale avoids most router problems.
-- **Open an issue** with the log attached.
+- **Can't connect:** check the port, the firewall and that everyone has the same version. Tailscale avoids most router problems.
+- **Still stuck:** [open an issue](https://github.com/zeriaxdev/tcv-mods/issues) and attach the log. On Windows, `Zip Diagnostics.bat` packs the logs into one file for you.
 
-[Testing and compatibility](VALIDATION.md) lists what has been tested so far. The Windows installer of this fork hasn't had a full end-to-end test yet, and playing Mac against Windows hasn't been tested.
-
-## How it works
-
-The installer recovers the game's project from your own copy with GDRETools, adds this mod's scripts and a few small hooks into the game's scripts, and exports a new executable with Godot. The game's art, sound and fonts are loaded from your copy at runtime. None of them are included in this repository.
+[Testing and compatibility](VALIDATION.md) lists what has been tested. Not yet tested: the installer on Windows, Save as video on Windows and Linux, and a match between Mac and Windows.
 
 ## Unofficial project
 
 This is a fan-made project. It is not made by, endorsed by or affiliated with YeahMaybe, the creator of [The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer). The game's only official sources are its itch.io page and YeahMaybe's website.
 
-- You need your own copy of the game. Get it from the [official itch.io page](https://yeahmaybe.itch.io/the-choicer-voicer).
+- You need your own copy of the game. Buy it on the [official itch.io page](https://yeahmaybe.itch.io/the-choicer-voicer).
 - This repository contains no game files. Share this project's code, never a game you built with it: a built game contains YeahMaybe's work.
-- Dub packs come from [GameBanana](https://gamebanana.com) and belong to their creators.
+- Dub packs come from [GameBanana](https://gamebanana.com) and belong to their creators. Get the pack creator's permission before you publish a video made from their pack.
 
-If you are YeahMaybe and want anything changed or taken down, [open an issue](https://github.com/zeriaxdev/tcv-multiplayer/issues) and it will be handled promptly.
+If you are YeahMaybe and want anything changed or taken down, [open an issue](https://github.com/zeriaxdev/tcv-mods/issues) and it will be handled promptly.
 
-## Credits and license
+## Contributing
 
-- **TypeOneAppolo (Appolo)** made the original multiplayer mod: [TypeOneAppolo/tcv-multiplayer-mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod). This repository is a fork of it. [Support Appolo on Ko-fi](https://ko-fi.com/appolodev).
+Bug reports and pull requests are welcome. Please attach the game log to bug reports. The checks in `tests/` run with Godot 4.4.1 against a project built from your own copy of the game; see [VALIDATION.md](VALIDATION.md).
+
+```
+mods/common            shared buttons and styling
+mods/community-packs   pack browser, downloads, installer
+mods/multiplayer       online play and the game hooks it needs
+mods/save-as-video     the Save Dub video hook
+exporter/              video exporter, backups, Mac app
+mac/                   Mac builder
+install_mod.py         Windows installer (Install.bat runs it)
+```
+
+## Thanks
+
+- **TypeOneAppolo (Appolo)** made the original multiplayer mod this repository is forked from. [Support Appolo on Ko-fi](https://ko-fi.com/appolodev).
 - **Herjuus** wrote the original community pack browser, download queue, installer and host pack sync.
-- **zeriaxdev** added the native game menus, macOS support, fast downloads, RAR support and automatic video export.
-- [The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer) is made by **YeahMaybe**.
-- Built with [Godot](https://godotengine.org/) and [GDRETools](https://github.com/GDRETools/gdsdecomp), which have their own licenses.
+- **YeahMaybe** made The Choicer Voicer.
+- [Godot](https://godotengine.org/), [GDRETools](https://github.com/GDRETools/gdsdecomp) and [FFmpeg](https://ffmpeg.org/) are separate projects with their own licenses.
 
-The mod code is available under the [MIT license](LICENSE); see [notices](NOTICE.md). The license does not cover the game, its files or community packs.
+## License
+
+[MIT](LICENSE) © TypeOneAppolo and zeriaxdev. See [notices](NOTICE.md). The license covers this repository's code only, not the game, its files or community packs.
