@@ -1055,26 +1055,31 @@ def main(argv: list[str]) -> int:
     say("1/5", "getting gdRE Tools")
     gdre = get_gdre(cache, args.gdre)
 
-    say("2/5", "decompiling your copy of the game")
-    decompile(gdre, exe, work)
-
-    say("3/5", "applying the mods")
-    custom_template = extract_game_template(exe, cache / "game-custom-template.exe")
-    features = apply_mod(work, args.features.split(",") if args.features else ask_features(), custom_template)
-
-    say("4/5", "getting Godot and export templates")
-    godot = get_godot(cache, args.godot)
-    ensure_templates(cache)
-
-    say("5/5", "building")
     output = Path(args.output)
-    export(godot, work, output)
-    if "save-as-video" in features:
-        # Save Dub runs this next to the game to make the video (needs Python and FFmpeg).
-        shutil.copy2(HERE / "exporter" / "exporter.py", output.parent / "exporter.py")
+    engine_copy = cache / "game-custom-template.exe"
+    try:
+        say("2/5", "decompiling your copy of the game")
+        decompile(gdre, exe, work)
 
-    if not args.keep_work:
-        shutil.rmtree(work, ignore_errors=True)
+        say("3/5", "applying the mods")
+        custom_template = extract_game_template(exe, engine_copy)
+        features = apply_mod(work, args.features.split(",") if args.features else ask_features(), custom_template)
+
+        say("4/5", "getting Godot and export templates")
+        godot = get_godot(cache, args.godot)
+        ensure_templates(cache)
+
+        say("5/5", "building")
+        export(godot, work, output)
+        if "save-as-video" in features:
+            # Save Dub runs this next to the game to make the video (needs Python and FFmpeg).
+            shutil.copy2(HERE / "exporter" / "exporter.py", output.parent / "exporter.py")
+    finally:
+        # The decompiled project and the engine copy are the game itself: never
+        # leave them in the mod folder, even when the build fails.
+        engine_copy.unlink(missing_ok=True)
+        if not args.keep_work:
+            shutil.rmtree(work, ignore_errors=True)
 
     size = output.stat().st_size
     print(f"\nDone -> {output.resolve()}  ({size // 1048576} MB)")
