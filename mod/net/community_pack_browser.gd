@@ -124,7 +124,8 @@ func _build_ui() -> void:
 	workspace.add_theme_constant_override("separation", 16)
 	main.add_child(workspace)
 	var navigation := VBoxContainer.new()
-	navigation.custom_minimum_size.x = 168
+	navigation.custom_minimum_size.x = 224
+	navigation.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	navigation.add_theme_constant_override("separation", 12)
 	workspace.add_child(navigation)
 	_nav_tabs = load("res://scene/module/button/button_array.tscn").instantiate()
@@ -144,12 +145,6 @@ func _build_ui() -> void:
 	_downloads_button.use_small()
 	_nav_tabs.add_child(_downloads_button)
 	navigation.add_child(_nav_tabs)
-	_online_downloads_box = CheckButton.new()
-	_online_downloads_box.text = "Download online"
-	_online_downloads_box.tooltip_text = "Allow new downloads during online multiplayer."
-	_online_downloads_box.visible = false
-	_online_downloads_box.toggled.connect(func(on: bool): _downloads.set_allow_online_downloads(on))
-	navigation.add_child(_online_downloads_box)
 	var content := VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 12)
@@ -157,7 +152,11 @@ func _build_ui() -> void:
 	var tools: = HBoxContainer.new()
 	_search_tools = tools
 	tools.add_theme_constant_override("separation", 10)
-	content.add_child(tools)
+	var search_row := Control.new()
+	search_row.custom_minimum_size.y = 40
+	content.add_child(search_row)
+	tools.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	search_row.add_child(tools)
 	_search = LineEdit.new()
 	_search.placeholder_text = "Search packs"
 	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -173,6 +172,13 @@ func _build_ui() -> void:
 		_page = 1
 		_load_page())
 	tools.add_child(search_button)
+	var filter_slot := Control.new()
+	filter_slot.custom_minimum_size.y = 92
+	navigation.add_child(filter_slot)
+	var browse_filters := VBoxContainer.new()
+	browse_filters.add_theme_constant_override("separation", 12)
+	browse_filters.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	filter_slot.add_child(browse_filters)
 	_sort = OptionButton.new()
 	_sort.add_item("Newest")
 	_sort.set_item_metadata(0, "Generic_Newest")
@@ -186,23 +192,29 @@ func _build_ui() -> void:
 	_sort.item_selected.connect(func(_index: int) -> void:
 		_page = 1
 		_load_page())
-	navigation.add_child(_sort)
+	browse_filters.add_child(_sort)
 	_rated = CheckButton.new()
 	_rated.text = "Content-rated"
 	_rated.tooltip_text = "Content-rated packs are hidden by default."
 	_rated.toggled.connect(func(_on: bool) -> void: _render_list())
-	navigation.add_child(_rated)
+	browse_filters.add_child(_rated)
+	_online_downloads_box = CheckButton.new()
+	_online_downloads_box.text = "Download online"
+	_online_downloads_box.tooltip_text = "Allow new downloads during online multiplayer."
+	_online_downloads_box.visible = false
+	_online_downloads_box.toggled.connect(func(on: bool): _downloads.set_allow_online_downloads(on))
+	filter_slot.add_child(_online_downloads_box)
 	var refresh: GAME_BUTTON = _button("Refresh", false)
 	refresh.pressed.connect(_refresh_view)
 	navigation.add_child(refresh)
 
 	var split: = HSplitContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.split_offset = 288
+	split.split_offset = 356
 	content.add_child(split)
 
 	var left_panel: = PanelContainer.new()
-	left_panel.custom_minimum_size.x = 288
+	left_panel.custom_minimum_size.x = 356
 	left_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	STYLE.pack_list_panel(left_panel)
 	split.add_child(left_panel)
