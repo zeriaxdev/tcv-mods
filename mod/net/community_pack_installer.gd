@@ -25,27 +25,49 @@ const SAFE_EXTENSIONS: PackedStringArray = [
 ]
 const AUDIO_EXTENSIONS: PackedStringArray = ["wav", "mp3", "ogg"]
 
-var _http: HTTPRequest
+const STALL_TIMEOUT_MS: int = 60000
+const MAX_REDIRECTS: int = 5
+
 var _busy: bool = false
 var _mod: Dictionary = {}
 var _file: Dictionary = {}
 var _download_path: String = ""
 
+# The download runs on its own thread so its speed no longer depends on the frame
+# rate (HTTPRequest without threads read ~16 KB per frame: 4.5 MB/s at 60 fps
+# against 16 MB/s for curl). The client is non-blocking and checks _cancel_requested
+# every pass, so cancel() never waits on a stalled server.
+# ponytail: plain int/bool shared with the worker, written by one side each; add a
+# Mutex if more state is ever shared.
+var _thread: Thread
+var _cancel_requested: bool = false
+var _received: int = 0
+
 
 func _ready() -> void:
-	_http = HTTPRequest.new()
-	# Threaded HTTP can block cancel_request while a server stalls mid-body.
-	_http.use_threads = false
-	_http.timeout = 0.0
-	_http.download_chunk_size = 256 * 1024
-	_http.request_completed.connect(_on_download_completed)
-	add_child(_http)
 	set_process(false)
+	# Downloads never resume across launches, so any partial file here is a leftover.
+	for leftover: String in DirAccess.get_files_at(DOWNLOAD_ROOT):
+		if leftover.ends_with(".part") or leftover.ends_with(".converted.zip"):
+			DirAccess.remove_absolute(DOWNLOAD_ROOT.path_join(leftover))
 
 
 func _process(_delta: float) -> void:
-	if not _busy: return
-	progress.emit(_http.get_downloaded_bytes(), int(_file.get("size", 0)), "Downloading from GameBanana...")
+	if _thread != null and not _thread.is_alive():
+		var outcome: Variant = _thread.wait_to_finish()
+		_thread = null
+		if not _busy:  # canceled: the partial file is ours to delete now the worker is gone
+			_cleanup_download()
+			set_process(false)
+			return
+		var result: Dictionary = outcome if outcome is Dictionary else {"error": "The download stopped unexpectedly."}
+		if result.has("error"):
+			_fail(str(result["error"]))
+			return
+		set_process(false)
+		_finish_download()
+		return
+	if _busy: progress.emit(_received, int(_file.get("size", 0)), "Downloading from GameBanana...")
 
 
 func is_busy() -> bool:
@@ -54,11 +76,124 @@ func is_busy() -> bool:
 
 func cancel() -> void:
 	if not _busy: return
-	_http.cancel_request()
+	_cancel_requested = true
 	_busy = false
-	set_process(false)
-	_cleanup_download()
+	# _process joins the worker (it exits within a millisecond) and deletes the partial file.
+	set_process(true)
 	failed.emit("Download canceled.")
+
+
+func _join_worker() -> void:
+	if _thread == null: return
+	_cancel_requested = true
+	_thread.wait_to_finish()
+	_thread = null
+	_cleanup_download()
+
+
+func _start_download(url: String, path: String) -> Error:
+	_join_worker()
+	_download_path = path
+	_cancel_requested = false
+	_received = 0
+	_busy = true
+	_thread = Thread.new()
+	var error: Error = _thread.start(_download_worker.bind(url, ProjectSettings.globalize_path(path), MAX_ARCHIVE_BYTES))
+	if error != OK:
+		_thread = null
+		return error
+	set_process(true)
+	return OK
+
+
+static func _split_url(url: String) -> Dictionary:
+	var tls: bool = url.begins_with("https://")
+	if not tls and not url.begins_with("http://"): return {}
+	var scheme: String = "https://" if tls else "http://"
+	var rest: String = url.substr(scheme.length())
+	var slash: int = rest.find("/")
+	var authority: String = rest if slash < 0 else rest.substr(0, slash)
+	var path: String = "/" if slash < 0 else rest.substr(slash)
+	var host: String = authority
+	var port: int = 443 if tls else 80
+	var colon: int = authority.rfind(":")
+	if colon > 0:
+		port = authority.substr(colon + 1).to_int()
+		host = authority.substr(0, colon)
+	if host.is_empty() or port <= 0: return {}
+	return {"tls": tls, "host": host, "port": port, "path": path, "origin": scheme + authority}
+
+
+# Runs on the worker thread. Returns {} on success or {"error": message}.
+func _download_worker(url: String, path: String, limit: int) -> Dictionary:
+	var out: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if out == null: return {"error": "Could not write the download file."}
+	var headers: PackedStringArray = [
+		"Accept: application/octet-stream",
+		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
+	]
+	for _hop: int in MAX_REDIRECTS + 1:
+		var target: Dictionary = _split_url(url)
+		if target.is_empty(): return {"error": "The download URL is not valid."}
+		var client: = HTTPClient.new()
+		client.blocking_mode_enabled = false
+		client.read_chunk_size = 256 * 1024
+		var tls: TLSOptions = TLSOptions.client() if target["tls"] else null
+		if client.connect_to_host(target["host"], target["port"], tls) != OK:
+			return {"error": "Could not connect to GameBanana."}
+		var requested: bool = false
+		var checked: bool = false
+		var last_activity: int = Time.get_ticks_msec()
+		while true:
+			if _cancel_requested:
+				client.close()
+				return {"canceled": true}
+			if Time.get_ticks_msec() - last_activity > STALL_TIMEOUT_MS:
+				client.close()
+				return {"error": "The download stalled for a minute and was stopped."}
+			client.poll()
+			var status: int = client.get_status()
+			if status in [HTTPClient.STATUS_CANT_RESOLVE, HTTPClient.STATUS_CANT_CONNECT,
+				HTTPClient.STATUS_CONNECTION_ERROR, HTTPClient.STATUS_TLS_HANDSHAKE_ERROR]:
+				return {"error": "The connection to GameBanana failed (status %d)." % status}
+			if status == HTTPClient.STATUS_CONNECTED and not requested:
+				if client.request(HTTPClient.METHOD_GET, target["path"], headers) != OK:
+					return {"error": "Could not send the download request."}
+				requested = true
+				continue
+			if requested and not checked and client.has_response():
+				checked = true
+				var code: int = client.get_response_code()
+				if code in [301, 302, 303, 307, 308]:
+					var location: String = ""
+					var response_headers: Dictionary = client.get_response_headers_as_dictionary()
+					for key: Variant in response_headers:
+						if str(key).to_lower() == "location": location = str(response_headers[key])
+					client.close()
+					if location.is_empty(): return {"error": "GameBanana sent a redirect without a target."}
+					url = location if location.contains("://") else str(target["origin"]) + location
+					break
+				if code < 200 or code >= 300:
+					client.close()
+					return {"error": "GameBanana returned HTTP %d for the archive." % code}
+			if status == HTTPClient.STATUS_BODY:
+				var chunk: PackedByteArray = client.read_response_body_chunk()
+				if chunk.is_empty():
+					OS.delay_usec(1000)
+				else:
+					out.store_buffer(chunk)
+					_received += chunk.size()
+					last_activity = Time.get_ticks_msec()
+					if _received > limit:
+						client.close()
+						return {"error": "This archive is larger than the 1 GB safety limit."}
+				continue
+			if checked and status in [HTTPClient.STATUS_CONNECTED, HTTPClient.STATUS_DISCONNECTED]:
+				client.close()
+				out.close()
+				return {}
+			OS.delay_usec(1000)
+	return {"error": "GameBanana redirected too many times."}
 
 
 func install(mod: Dictionary, file: Dictionary) -> void:
@@ -76,18 +211,11 @@ func install(mod: Dictionary, file: Dictionary) -> void:
 	if DirAccess.make_dir_recursive_absolute(DOWNLOAD_ROOT) != OK:
 		failed.emit("Could not create the community-pack download folder.")
 		return
-	_download_path = DOWNLOAD_ROOT.path_join("%d.zip.part" % int(file["id"]))
-	if FileAccess.file_exists(_download_path): DirAccess.remove_absolute(_download_path)
-	_http.download_file = _download_path
-	_http.body_size_limit = MAX_ARCHIVE_BYTES
-	_busy = true
-	set_process(true)
+	_join_worker()
+	var path: String = DOWNLOAD_ROOT.path_join("%d.%s.part" % [int(file["id"]), str(file.get("name", "")).get_extension().to_lower()])
+	if FileAccess.file_exists(path): DirAccess.remove_absolute(path)
 	progress.emit(0, int(file.get("size", 0)), "Connecting to GameBanana...")
-	var headers: PackedStringArray = [
-		"Accept: application/octet-stream",
-		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
-	]
-	var error: Error = _http.request(str(file["url"]), headers)
+	var error: Error = _start_download(str(file["url"]), path)
 	if error != OK:
 		_fail("Could not start the download (%s)." % error_string(error))
 
@@ -95,11 +223,8 @@ func install(mod: Dictionary, file: Dictionary) -> void:
 static func installability_problem(file: Dictionary) -> String:
 	var name: String = str(file.get("name", ""))
 	var extension: String = name.get_extension().to_lower()
-	if extension == "rar":
-		return ("This is a RAR archive. Safe RAR extraction is not bundled yet; "
-			+ "choose a ZIP file from this submission if one is available.")
-	if extension != "zip":
-		return "This file is not a ZIP. Only ZIP archives are supported right now."
+	if extension not in ["zip", "rar"]:
+		return "This file is not a ZIP or RAR. Only ZIP and RAR archives are supported right now."
 	var size: int = int(file.get("size", 0))
 	if size <= 0: return "GameBanana did not report a valid file size."
 	if size > MAX_ARCHIVE_BYTES: return "This archive is larger than the 1 GB safety limit."
@@ -115,21 +240,6 @@ static func installability_problem(file: Dictionary) -> String:
 		return "GameBanana has not marked this archive clean."
 	if bool(file.get("archived", false)): return "This GameBanana file has been archived."
 	return ""
-
-
-func _on_download_completed(
-	result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray
-) -> void:
-	set_process(false)
-	_http.download_file = ""
-	if not _busy: return
-	if result != HTTPRequest.RESULT_SUCCESS:
-		_fail("The archive download failed (%d)." % result)
-		return
-	if response_code < 200 or response_code >= 300:
-		_fail("GameBanana returned HTTP %d for the archive." % response_code)
-		return
-	_finish_download.call_deferred()
 
 
 func _finish_download() -> void:
@@ -174,7 +284,7 @@ func _finish_download() -> void:
 func _fail(message: String) -> void:
 	_busy = false
 	set_process(false)
-	_http.download_file = ""
+	_join_worker()
 	_cleanup_download()
 	failed.emit(message)
 
@@ -187,6 +297,29 @@ func _cleanup_download() -> void:
 
 
 static func _validate_and_extract(
+	archive: String, mod: Dictionary, file: Dictionary, voice_root_override: String = "",
+	use_registry: bool = true
+) -> Dictionary:
+	if not archive.get_file().contains(".rar"):
+		return _validate_and_extract_zip(archive, mod, file, voice_root_override, use_registry)
+	# RAR: the system's bsdtar (macOS /usr/bin/tar, Windows tar.exe) rewrites it as a
+	# ZIP without extracting anything, then the normal ZIP checks decide what installs.
+	# ponytail: no timeout on tar; a RAR bomb costs CPU time here, but the ZIP checks
+	# still refuse oversized contents before anything is written to packs_voice.
+	var converted: String = archive.get_basename() + ".converted.zip"
+	var tar: String = "/usr/bin/tar" if OS.get_name() == "macOS" else "tar"
+	var output: Array = []
+	var code: int = OS.execute(tar, ["-c", "-f", ProjectSettings.globalize_path(converted), "--format", "zip",
+		"@" + ProjectSettings.globalize_path(archive)], output, true)
+	if code != 0 or not FileAccess.file_exists(converted):
+		if FileAccess.file_exists(converted): DirAccess.remove_absolute(converted)
+		return {"error": "This RAR archive could not be read (%s)." % ("".join(output).strip_edges().left(160) if not output.is_empty() else "tar exit %d" % code)}
+	var result: Dictionary = _validate_and_extract_zip(converted, mod, file, voice_root_override, use_registry)
+	DirAccess.remove_absolute(converted)
+	return result
+
+
+static func _validate_and_extract_zip(
 	archive: String, mod: Dictionary, file: Dictionary, voice_root_override: String = "",
 	use_registry: bool = true
 ) -> Dictionary:

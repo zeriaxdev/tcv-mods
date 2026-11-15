@@ -5,9 +5,8 @@ func check_cancel():
  var server = TCPServer.new()
  assert(server.listen(0,"127.0.0.1") == OK)
  var port = server.get_local_port()
- installer._busy = true
- installer.set_process(false)
- assert(installer._http.request("http://127.0.0.1:%d/slow" % port) == OK)
+ DirAccess.make_dir_recursive_absolute(installer.DOWNLOAD_ROOT)
+ assert(installer._start_download("http://127.0.0.1:%d/slow" % port, installer.DOWNLOAD_ROOT.path_join("cancel-test.part")) == OK)
  var peer: StreamPeerTCP
  for i in 120:
   if server.is_connection_available():
@@ -22,9 +21,11 @@ func check_cancel():
  var elapsed = Time.get_ticks_msec() - started
  assert(elapsed < 100, "Cancel blocked for %d ms" % elapsed)
  assert(not installer.is_busy())
- await process_frame
+ for i in 30: await process_frame
+ assert(installer._thread == null, "worker was not joined after cancel")
+ assert(not FileAccess.file_exists(installer.DOWNLOAD_ROOT.path_join("cancel-test.part")), "partial file left behind")
  assert(root.get_node("CommunityPacks").downloads._active_id == "")
  peer.disconnect_from_host()
  server.stop()
- print("PASS: cancel returned in %d ms with a stalled server, game continued processing" % elapsed)
+ print("PASS: cancel returned in %d ms with a stalled server, worker joined, partial file removed" % elapsed)
  quit()
