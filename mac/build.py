@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     # Not a purchase check (nothing offline can prove that); the tool is only for people who bought the game.
     print("This builds a Mac app from your own copy of The Choicer Voicer. It doesn't include or download the game.")
     print("Buy it at https://yeahmaybe.itch.io/the-choicer-voicer")
-    if subprocess.run(["/usr/bin/pgrep", "-f", "The Choicer Voicer.app/Contents/MacOS"], capture_output=True).returncode == 0:
+    if subprocess.run(["/usr/bin/pgrep", "-x", "The Choicer Voicer"], capture_output=True).returncode == 0:
         raise ValueError("Close The Choicer Voicer first, then run the builder again")
     target = args.output.expanduser().resolve().parent
     free = shutil.disk_usage(target if target.exists() else Path.home()).free
