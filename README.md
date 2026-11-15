@@ -15,7 +15,7 @@ You need **The Choicer Voicer 0.5.3 standard Windows build** and **Python 3**.
 
 The installer downloads Godot and GDRETools and builds a separate executable. Start with an unmodified game; keep the original for future updates. If Python is missing, the installer offers installation instructions.
 
-For macOS, use [Choicer Voicer for macOS](https://github.com/zeriaxdev/tcv-macos) with this mod.
+For macOS, use [Choicer Voicer Mac Builder](https://github.com/zeriaxdev/tcv-macos) with this mod.
 
 ## Play online
 
