@@ -113,7 +113,7 @@ echo rest of the mod isn't with it.
 echo.
 echo Right click the download, Extract All (or Extract Here in WinRAR), pick a
 echo normal folder like your Desktop, and run Install.bat out of the folder it
-echo makes. It should have install_mod.py and a mod folder in it.
+echo makes. It should have install_mod.py and a mods folder in it.
 echo.
 echo I'm running from:
 echo   %~dp0

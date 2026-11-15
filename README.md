@@ -134,7 +134,7 @@ Inside it, `game/packs_voice` holds the dub packs, `game/recordings/dub_recordin
 - **Can't connect:** check the port, the firewall and that everyone has the same version. Tailscale avoids most router problems.
 - **Still stuck:** [open an issue](https://github.com/zeriaxdev/tcv-mods/issues) and attach the log. On Windows, `Zip Diagnostics.bat` packs the logs into one file for you.
 
-[Testing and compatibility](VALIDATION.md) lists what has been tested. Not yet tested: the installer on Windows, Save as video on Windows and Linux, and a match between Mac and Windows.
+[Testing and compatibility](VALIDATION.md) lists what has been tested. The Windows installer has been run end to end in CrossOver, a Windows compatibility layer on macOS. Not yet tested on a real Windows PC: microphone recording, Save as video, and a match between Mac and Windows.
 
 ## Unofficial project
 

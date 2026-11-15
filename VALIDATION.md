@@ -25,10 +25,11 @@ The game project and assets are supplied locally; they are not test fixtures in 
 - Leftover partial downloads older than 10 minutes are removed at startup; download failures are written to the game log.
 - Save Dub exports a real saved dub to MP4 in about 5 s on macOS, the button fills with the progress, and a failed export offers Retry video.
 - The Windows installer keeps the game's own engine (4.4.1 custom build): a modded Windows build exported on macOS with it runs the custom engine and carries the modded data.
+- The Windows installer (`Install.bat` with Windows Python 3.12) runs all five steps in a CrossOver Windows 10 bottle on the real 0.5.3 standard exe: it falls back from `py` to `python`, keeps the game's custom engine, patches 8 game scripts, places `exporter.py` next to the game and removes the decompiled project. The resulting exe starts, loads the multiplayer mod (1.3.0 at the time, protocol 8) and finds the microphones with input enabled.
 
 ## Still to verify
 
-- Running the Windows installer on Windows, and microphone recording in the resulting build.
+- Microphone recording on a real Windows PC (CrossOver handles audio differently).
 - Save Dub on Windows and Linux, and RAR packs on Windows (`tar.exe`).
 - Completing a multiplayer round between macOS and Windows.
 - Microphone device changes during a running game. Restarting may be necessary after changing inputs.

@@ -50,6 +50,7 @@ func _ready() -> void:
 	# Only files untouched for 10 minutes: a second running copy of the game (local
 	# multiplayer testing) may be writing a fresh one right now.
 	var now: int = int(Time.get_unix_time_from_system())
+	if not DirAccess.dir_exists_absolute(DOWNLOAD_ROOT): return  # first launch: nothing to clean
 	for leftover: String in DirAccess.get_files_at(DOWNLOAD_ROOT):
 		var path: String = DOWNLOAD_ROOT.path_join(leftover)
 		if (leftover.ends_with(".part") or leftover.ends_with(".converted.zip")) \

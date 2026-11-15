@@ -1084,7 +1084,7 @@ def main(argv: list[str]) -> int:
     size = output.stat().st_size
     print(f"\nDone -> {output.resolve()}  ({size // 1048576} MB)")
     print("Launch it, press F9 on the main menu to open the online lobby.")
-    print("Everyone you play with needs to build this same version themselves.")
+    print("To play online, your friends need tcv-mods too (or Appolo's original mod), with the same protocol number.")
     print("Based on Appolo's mod. Support: https://ko-fi.com/appolodev")
     return 0
 
