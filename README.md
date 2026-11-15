@@ -83,11 +83,11 @@ All features are included by default. To pick, add for example `--features commu
 ### Play online
 
 1. Open **Online (F9)** from the main menu.
-2. Enter your name. One player picks **Host**. Everyone else types the host's address and picks **Join**.
-3. Everyone uses the same port. The default is **7654**.
-4. Pick a game mode and mark yourself **Ready**. The modes unlock once a second player joins.
+2. Enter your name. One player picks **Host a game** and presses **Open lobby**. Their addresses are hidden until they tick **Show**, and **Copy** works either way.
+3. Everyone else picks **Join a game**, types the host's address and presses **Join**. The port is under **Advanced**. The default is **7654**, and everyone needs the same one.
+4. On **Contestants**, mark yourself **Ready** and pick a game mode. The modes unlock once a second player joins.
 
-The host's address can be a local address on the same network, a [Tailscale](https://tailscale.com/) address (the easiest way to play over the internet), or the host's public address with **UDP port 7654** forwarded on their router. Allow the game through your firewall when asked. Everyone needs the same protocol number, shown at the bottom of the Online menu (currently 8). Players on Appolo's original mod 1.1.9 use protocol 8 too.
+The host's address can be a local address on the same network, a [Tailscale](https://tailscale.com/) address (the easiest way to play over the internet), or the host's public address with **UDP port 7654** forwarded on their router. Allow the game through your firewall when asked. Everyone needs a matching version of the mod. If they don't match, the Online menu says who needs to update. Appolo's original mod 1.1.9 also works with this one.
 
 In Dub Mode, the host can offer their packs to the other players before a round, and each player chooses whether to download them. The [original mod's guide](UPSTREAM_README.md) has more on game modes and pack sharing.
 

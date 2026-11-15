@@ -169,22 +169,21 @@ func host_game(player_name: String, pack: String, port: int = PORT) -> Error:
 
 # every address a joiner might be asked to type, with the one that works marked.
 # on Hamachi or Radmin it is theirs, never the public IP people go and look up.
-func addresses_to_give_out() -> String:
-	var lines: PackedStringArray = []
+func addresses_to_give_out() -> PackedStringArray:
+	var found: PackedStringArray = []
 	for address: String in IP.get_local_addresses():
 		# IPv4 only here, and link-local means the adapter never got a lease.
 		if address.contains(":"): continue
 		if address.begins_with("127.") or address.begins_with("169.254."): continue
-		lines.append("    %s%s" % [address, _address_hint(address)])
-	if lines.is_empty(): return "    (no network address found on this machine)"
-	return "\n".join(lines)
+		found.append(address)
+	return found
 
 
-func _address_hint(address: String) -> String:
-	if address.begins_with("25."): return "   <- Hamachi. Use this one."
-	if address.begins_with("26."): return "   <- Radmin VPN. Use this one."
+func address_hint(address: String) -> String:
+	if address.begins_with("25."): return "Hamachi. Use this one."
+	if address.begins_with("26."): return "Radmin VPN. Use this one."
 	if address.begins_with("192.168.") or address.begins_with("10."):
-		return "   (only works for someone on your own wifi)"
+		return "Only works on your own wifi."
 	return ""
 
 
@@ -322,11 +321,9 @@ func _on_peer_disconnected(id: int) -> void:
 	_pending_handshakes.erase(id)
 	if never_handshook:
 		log_net("peer %d left without ever handshaking" % id)
-		host_notice.emit("Someone reached you and left again without getting through the "
-			+ "join handshake. That is nearly always an older build of the mod -- and an "
-			+ "older one cannot even be told that it is old, so it gives up rather than "
-			+ "saying anything. You both need to install off the same download. "
-			+ _this_build())
+		host_notice.emit("Someone tried to join and gave up. Your friend is most likely "
+			+ "on an older version of the mod. Ask them to update tcv-mods.\nYou have "
+			+ _this_build() + ".")
 	if is_host():
 		# somebody who never made it into the roster cannot have changed it, and
 		# everything below is about a seat coming free. This used to run for any
@@ -431,14 +428,20 @@ func _HANDSHAKE(payload: Dictionary) -> void:
 
 	var their_version: int = int(payload.get("version", 0))
 	if their_version != PROTOCOL_VERSION:
-		var which: String = "a newer" if their_version > PROTOCOL_VERSION else "an older"
+		var they_are_older: bool = their_version < PROTOCOL_VERSION
 		var theirs: String = _describe_build(str(payload.get("mod", "")), their_version)
-		var told_them: String = ("Different build of the mod. You are on %s, the host is on "
-			+ "%s. Whoever is behind runs the installer again, off the same download.") % [
+		var told_them: String = ("You are on %s version than the host, so you can't play "
+			+ "together. %s\nYou have %s. The host has %s.") % [
+			"an older" if they_are_older else "a newer",
+			"Update tcv-mods and try again." if they_are_older
+				else "Ask the host to update tcv-mods.",
 			theirs, _this_build()]
-		var told_us: String = ("Turned a joiner away: they are on %s build of the mod (%s), "
-			+ "you are on %s. You both need to install off the same download.") % [
-			which, theirs, _this_build()]
+		var told_us: String = ("Your friend is on %s version, so they couldn't join. %s\n"
+			+ "They have %s. You have %s.") % [
+			"an older" if they_are_older else "a newer",
+			"They need to update tcv-mods." if they_are_older
+				else "Update tcv-mods to play with them.",
+			theirs, _this_build()]
 		_refuse(sender, told_them, told_us)
 		return
 	if players.size() >= MAX_PLAYERS:
@@ -507,9 +510,9 @@ func _watch_for_handshake(id: int) -> void:
 	if not is_host() or not _pending_handshakes.has(id): return
 	_pending_handshakes.erase(id)
 	log_net("peer %d connected but never handshook, dropping it" % id)
-	host_notice.emit("Someone reached you but never got through the join handshake. "
-		+ "That is nearly always an older build of the mod -- they need to run the "
-		+ "installer again off the same download as you. " + _this_build())
+	host_notice.emit("Someone tried to join but couldn't get in. Your friend is most likely "
+		+ "on an older version of the mod. Ask them to update tcv-mods.\nYou have "
+		+ _this_build() + ".")
 	_drop_peer(id)
 
 
@@ -517,15 +520,15 @@ func _watch_for_handshake(id: int) -> void:
 # that gets screenshotted and pasted at me, and "one of you is on the wrong
 # build" is no use to anybody unless it also says which build said it.
 func _this_build() -> String:
-	return "You are on mod %s, protocol %d." % [MOD_VERSION, PROTOCOL_VERSION]
+	return "tcv-mods %s (protocol %d)" % [MOD_VERSION, PROTOCOL_VERSION]
 
 
 # what to call the other end's build. anything old enough not to send its version
 # number is pinned down by that absence alone, which is worth saying rather than
 # printing an empty pair of quotes.
 func _describe_build(mod: String, protocol: int) -> String:
-	if mod.is_empty(): return "protocol %d, too old to say which build it is" % protocol
-	return "mod %s, protocol %d" % [mod, protocol]
+	if mod.is_empty(): return "a very old version (protocol %d)" % protocol
+	return "%s (protocol %d)" % [mod, protocol]
 
 
 # the other side of it: we got a socket open and the host has said nothing back.
@@ -536,11 +539,10 @@ func _watch_for_answer(generation: int) -> void:
 	if generation != _join_generation: return
 	if is_host() or not is_online() or _handshake_answered: return
 	log_net("host never answered the handshake")
-	connection_failed.emit(("Reached the host, but they never answered the join.\n"
-		+ "You are almost certainly on different builds of the mod: an older one cannot "
-		+ "even be told that it is old. Both of you run the installer again off the same "
-		+ "download, then try again.\n" + _this_build() + " Ask the host what theirs says "
-		+ "at the top of their lobby."))
+	connection_failed.emit(("Found the host, but they didn't let you in.\n"
+		+ "You and the host are most likely on different versions of the mod. Compare the "
+		+ "tcv-mods version at the bottom of the Online menu, and whoever is older updates.\n"
+		+ "You have " + _this_build() + "."))
 	leave()
 
 
@@ -1579,8 +1581,7 @@ func _build_the_way_in() -> void:
 	_entry_button = MENU_BUTTON.new()
 	_entry_button.theme = preload("res://net/choicer_style.gd").make_theme()
 	_entry_button.text = "Online (F9)"
-	_entry_button.tooltip_text = "Open the multiplayer lobby.\nMultiplayer mod %s, protocol %d." % [
-		MOD_VERSION, PROTOCOL_VERSION]
+	_entry_button.tooltip_text = "Open the multiplayer lobby.\ntcv-mods %s" % MOD_VERSION
 	# the menus run on ui_accept, and a button holding focus eats the first press.
 	_entry_button.focus_mode = Control.FOCUS_NONE
 	_entry_button.pressed.connect(open_lobby)

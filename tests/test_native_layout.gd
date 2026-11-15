@@ -26,9 +26,14 @@ func check_layout():
  await process_frame
  await process_frame
  var lobby = shell.get_node("SlideCapsule").get_child(0)
- for control in [lobby.name_field,lobby.port_field,lobby.host_button,lobby.join_button,lobby.player_rows]:
-  var rect = control.get_global_rect()
-  assert(rect.end.x <= 1153 and rect.end.y <= 592, "Online content overflow: %s" % rect)
+ for tab in [0, 1]:
+  lobby._show_tab(tab)
+  await process_frame
+  await process_frame
+  for control in [lobby.name_field,lobby.host_button,lobby._address_rows,lobby.player_rows,lobby.ready_button,lobby.status_label]:
+   if not control.is_visible_in_tree(): continue
+   var rect = control.get_global_rect()
+   assert(rect.end.x <= 1153 and rect.end.y <= 592, "Online content overflow: %s %s" % [control,rect])
  print("1152x648 menu bounds and dialog checks passed")
  shell.free()
  quit()
