@@ -44,7 +44,7 @@ You need **The Choicer Voicer 0.5.3**, the standard Windows download from [itch.
 1. Install **Python 3** from [python.org](https://www.python.org/downloads/). Tick **Add python.exe to PATH**.
 2. For **Save as video**, also install FFmpeg: open Command Prompt and run `winget install Gyan.FFmpeg`.
 3. Extract the game's ZIP somewhere you'll keep it.
-4. [Download this repository](https://github.com/zeriaxdev/tcv-mods/archive/refs/heads/main.zip) and extract the whole ZIP. Don't run anything from inside the ZIP.
+4. Download `tcv-mods-<version>.zip` from the [latest release](https://github.com/zeriaxdev/tcv-mods/releases/latest) and extract the whole ZIP. Don't run anything from inside the ZIP.
 5. Drag the game's `.exe` onto `Install.bat`.
 6. Answer which features you want. Press Enter to take each one.
 7. Wait while it downloads Godot and GDRETools and builds the game. The first run takes a few minutes.
@@ -63,7 +63,7 @@ The game only comes out for Windows, so on a Mac you build a native app from the
 Then:
 
 1. Move Godot and GDRETools to **Applications**.
-2. [Download this repository](https://github.com/zeriaxdev/tcv-mods/archive/refs/heads/main.zip) and extract it.
+2. Download `tcv-mods-<version>.zip` from the [latest release](https://github.com/zeriaxdev/tcv-mods/releases/latest) and extract it.
 3. Open Terminal in that folder and run, with your own paths:
 
 ```sh
@@ -87,7 +87,7 @@ All features are included by default. To pick, add for example `--features commu
 3. Everyone uses the same port. The default is **7654**.
 4. Pick a game mode and mark yourself **Ready**. The modes unlock once a second player joins.
 
-The host's address can be a local address on the same network, a [Tailscale](https://tailscale.com/) address (the easiest way to play over the internet), or the host's public address with **UDP port 7654** forwarded on their router. Allow the game through your firewall when asked. Everyone needs the same version, shown at the bottom of the Online menu.
+The host's address can be a local address on the same network, a [Tailscale](https://tailscale.com/) address (the easiest way to play over the internet), or the host's public address with **UDP port 7654** forwarded on their router. Allow the game through your firewall when asked. Everyone needs the same protocol number, shown at the bottom of the Online menu (currently 8). Players on Appolo's original mod 1.1.9 use protocol 8 too.
 
 In Dub Mode, the host can offer their packs to the other players before a round, and each player chooses whether to download them. The [original mod's guide](UPSTREAM_README.md) has more on game modes and pack sharing.
 

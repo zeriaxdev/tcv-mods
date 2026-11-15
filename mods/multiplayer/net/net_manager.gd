@@ -20,7 +20,7 @@ signal scores_received(scores: PackedInt32Array)
 # anything that goes out, even when the protocol below does not move: two builds
 # that behave differently and both call themselves 1.1.5 make the one question
 # worth asking -- "what does yours say?" -- impossible to answer.
-const MOD_VERSION: String = "1.1.9"
+const MOD_VERSION: String = "1.2.0"
 
 const PORT: int = 7654
 const MAX_PLAYERS: int = 4
