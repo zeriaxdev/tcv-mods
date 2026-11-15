@@ -451,6 +451,11 @@ func _refresh() -> void:
 		var peer: int = Net.peer_for_slot(slot)
 		var record: Dictionary = Net.players.get(peer, {})
 		var row: TreeItem = player_rows.create_item(root)
+		if peer == Net.my_id() and _mic_capture != null:
+			# custom mode resets the cell, so before set_text below
+			row.set_cell_mode(1, TreeItem.CELL_MODE_CUSTOM)
+			row.set_custom_draw_callback(1, _draw_mic_meter)
+			row.set_tooltip_text(1, "Your mic. Talk and it should move.")
 		row.set_cell_mode(0, TreeItem.CELL_MODE_CHECK)
 		row.set_checked(0, bool(record.get("ready", false)))
 		row.set_tooltip_text(0, "Ready" if record.get("ready", false) else "Not ready")
@@ -476,31 +481,51 @@ func _refresh() -> void:
 
 
 ### mic test ###################################################################
-# A level meter under Ready, so everyone can see their microphone works before
-# a round. Listens on its own silent bus (volume -80 dB, after the capture
-# effect), and stops when the Online menu closes.
+# A small level meter right after your own name in the player list, so you can
+# see your microphone works before a round. Only your own: nobody hears anyone
+# live, recordings upload after each line. Listens on its own silent bus
+# (volume -80 dB, after the capture effect) and stops when the Online menu closes.
 
 const MIC_TEST_BUS := "TCVMicTest"
-var _mic_bar: ProgressBar
+const MIC_METER_SIZE := Vector2(8, 22)
+var _mic_level := 0.0
 var _mic_player: AudioStreamPlayer
 var _mic_capture: AudioEffectCapture
+var _mic_hint: Label
+var _mic_silent_for := 0.0
+# a working mic never sends exact zeros (there's always a little noise), so
+# this many seconds of them means no sound is getting through at all.
+const MIC_HINT_AFTER := 4.0
 
 
 func _build_mic_test(parent: Control) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	var label := Label.new()
-	label.text = "Mic"
-	row.add_child(label)
-	_mic_bar = ProgressBar.new()
-	_mic_bar.show_percentage = false
-	_mic_bar.max_value = 1.0
-	_mic_bar.custom_minimum_size = Vector2(220, 14)
-	_mic_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_mic_bar.tooltip_text = "Talk: the bar should move. If it doesn't, check your microphone in Settings."
-	row.add_child(_mic_bar)
-	parent.add_child(row)
+	_mic_hint = Label.new()
+	_mic_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mic_hint.add_theme_color_override("font_color", Color("ffe09c"))
+	if OS.get_name() == "macOS":
+		# Godot 4.4 on Mac only reads the mic that was the Mac's default when the game started.
+		_mic_hint.text = "No sound from your mic. Make it your Mac's input in System Settings > Sound, then restart the game."
+	else:
+		_mic_hint.text = "No sound from your mic. Check it in Settings > Mic Test & Crust."
+	_mic_hint.visible = false
+	parent.add_child(_mic_hint)
 	_start_mic_test()
+
+
+# your own name cell: the Tree draws the text, this adds the meter after it.
+func _draw_mic_meter(item: TreeItem, rect: Rect2) -> void:
+	var font: Font = player_rows.get_theme_font("font")
+	var font_size: int = player_rows.get_theme_font_size("font_size")
+	var text_width: float = font.get_string_size(item.get_text(1), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var x: float = rect.position.x + player_rows.get_theme_constant("inner_item_margin_left") + text_width + 10.0
+	var box := Rect2(Vector2(x, rect.get_center().y - MIC_METER_SIZE.y / 2.0), MIC_METER_SIZE)
+	player_rows.draw_rect(box, Color(0, 0, 0, 0.15))
+	# green, then orange, then red at the top, filled from the bottom
+	for band: Array in [[0.0, 0.6, Color("4c9f4c")], [0.6, 0.85, Color("e0953a")], [0.85, 1.0, Color("d04a3c")]]:
+		var top: float = minf(_mic_level, band[1])
+		if top <= band[0]: break
+		player_rows.draw_rect(Rect2(box.position.x, box.end.y - box.size.y * top,
+			box.size.x, box.size.y * (top - band[0])), band[2])
 
 
 func _start_mic_test() -> void:
@@ -520,14 +545,18 @@ func _start_mic_test() -> void:
 	_mic_player.play()
 
 
-func _process(_delta: float) -> void:
-	if _mic_capture == null or _mic_bar == null: return
+func _process(delta: float) -> void:
+	if _mic_capture == null: return
 	var frames := _mic_capture.get_frames_available()
 	var peak := 0.0
 	if frames > 0:
 		for frame: Vector2 in _mic_capture.get_buffer(frames):
 			peak = maxf(peak, maxf(absf(frame.x), absf(frame.y)))
-	_mic_bar.value = maxf(clampf(peak * 2.0, 0.0, 1.0), _mic_bar.value * 0.85)  # quick rise, slow fall
+	var level: float = maxf(clampf(peak * 2.0, 0.0, 1.0), _mic_level * 0.85)  # quick rise, slow fall
+	if absf(level - _mic_level) > 0.005: player_rows.queue_redraw()
+	_mic_level = level
+	_mic_silent_for = _mic_silent_for + delta if peak == 0.0 else 0.0
+	_mic_hint.visible = _mic_silent_for > MIC_HINT_AFTER
 
 
 func _exit_tree() -> void:
