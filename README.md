@@ -1,46 +1,82 @@
 # Choicer Voicer Multiplayer
 
-Play The Choicer Voicer online and browse community dub packs without leaving the game.
+Play [The Choicer Voicer](https://yeahmaybe.itch.io/the-choicer-voicer) online with friends, download dub packs from GameBanana without leaving the game, and save every dub as a video.
 
-The menus use the game's own buttons, fonts, panels and navigation. Includes Appolo's multiplayer mod and the Community Packs browser.
+This is a fork of [Appolo's multiplayer mod](https://github.com/TypeOneAppolo/tcv-multiplayer-mod). Everything fits into the game's own menus, buttons and fonts, so it feels like part of the game.
+
+## Why I made this
+
+The Choicer Voicer is one of the most fun games I've played in a long time, and making mods for it has turned into a new passion of mine. If you enjoy these mods, please [buy the game on itch.io](https://yeahmaybe.itch.io/the-choicer-voicer). It's pay-what-you-want, and YeahMaybe deserves every bit of support. None of this would exist without their game.
+
+## What it adds
+
+- **Online play.** Host or join a game over the internet or your local network, in Gameshow or Dub Mode.
+- **Community packs.** Search, download and remove GameBanana dub packs from the main menu. ZIP and RAR packs both work, downloads keep going in the background, and slow download servers are skipped automatically.
+- **Save as video** (Mac). When you press **Save Dub**, the button fills up while your dub is turned into an MP4 with your voice mixed in. Click **Open video** to watch it. Needs the [Exporter](https://github.com/zeriaxdev/tcv-exporter).
 
 ## Install on Windows
 
-You need **The Choicer Voicer 0.5.3 standard Windows build** and **Python 3**.
+You need:
 
-1. Download the game from [YeahMaybe on itch.io](https://yeahmaybe.itch.io/the-choicer-voicer) and extract its ZIP.
-2. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract the entire ZIP.
-3. Drag the original game `.exe` onto `Install.bat`.
-4. Wait for the installer to finish, then open the new modded executable.
+- **The Choicer Voicer 0.5.3**, the standard Windows download from [itch.io](https://yeahmaybe.itch.io/the-choicer-voicer).
+- **Python 3** from [python.org](https://www.python.org/downloads/). In the installer, tick **Add python.exe to PATH**.
 
-The installer downloads Godot and GDRETools and builds a separate executable. Start with an unmodified game; keep the original for future updates. If Python is missing, the installer offers installation instructions.
+Steps:
 
-For macOS, use [Choicer Voicer Mac Builder](https://github.com/zeriaxdev/tcv-macos) with this mod.
+1. Extract the game's ZIP somewhere you'll keep it.
+2. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract the whole ZIP. Don't run anything from inside the ZIP.
+3. Drag the game's `.exe` onto `Install.bat`.
+4. Wait while it downloads Godot and GDRETools and builds the modded game. The first run takes a few minutes.
+5. Open the new executable it creates next to the original.
+
+Keep the original `.exe`. When the game or this mod updates, run the installer on the original again.
+
+## Install on Mac
+
+The game only comes out for Windows, so on a Mac you build a native app from the Windows download:
+
+1. [Download this mod](https://github.com/zeriaxdev/tcv-multiplayer/archive/refs/heads/main.zip) and extract it.
+2. Follow the [Mac Builder](https://github.com/zeriaxdev/tcv-macos) guide and add `--mod` with the path to this folder.
+3. Optional: install the [Exporter](https://github.com/zeriaxdev/tcv-exporter) to get **Save as video**.
 
 ## Play online
 
 1. Open **Online (F9)** from the main menu.
-2. Enter your name. One player chooses **Host**; everyone else enters that player's address and chooses **Join**.
-3. Use the same port on every computer; the default is **7654**.
-4. Choose your game mode and mark yourself **Ready**.
+2. Enter your name. One player picks **Host**. Everyone else types the host's address and picks **Join**.
+3. Everyone uses the same port. The default is **7654**.
+4. Pick a game mode and mark yourself **Ready**.
 
-Every player needs the same multiplayer protocol: **version 1.1.9, protocol 8**. Use a reachable host address: a local address on the same network, a Tailscale address, or a public address with **UDP 7654** forwarded to the host. Allow the game through the firewall.
+The host's address can be:
 
-Dub Mode can offer packs to other players before a round. Each recipient must accept the download. See the [upstream guide](UPSTREAM_README.md) for gameplay and pack-sharing details.
+- a local address, if you're on the same network,
+- a [Tailscale](https://tailscale.com/) address, which is the easiest way to play over the internet,
+- or the host's public address, with **UDP port 7654** forwarded on their router.
+
+Allow the game through your firewall when asked. Everyone needs the same mod version: **1.1.9, protocol 8**. It's shown at the bottom of the Online menu.
+
+In Dub Mode, the host can offer their packs to the other players before a round. Each player chooses whether to download them. The [original mod's guide](UPSTREAM_README.md) has more on game modes and pack sharing.
 
 ## Community packs
 
-Open **Community packs** from the main menu to search GameBanana, install dub packs and manage downloads. **Installed packs** lists packs managed by the browser. Removing a pack requires confirmation; manually installed folders are left alone.
+Open **Community packs** from the main menu.
 
-This mod already includes the browser. Install [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) separately only if you want the browser without multiplayer.
+- **Browse packs:** search GameBanana or sort by newest or most liked, then pick a file and press **Download**.
+- **Installed packs:** everything installed through the browser. Removing a pack asks first, and packs you installed by hand are never touched.
+- **Downloads:** progress for each pack in the queue, with a **Cancel** button.
 
-Search also filters Installed packs and Downloads locally. Navigation uses full-size game buttons.
+Want only the pack browser, without online play? Use [Community Packs](https://github.com/zeriaxdev/tcv-community-packs) instead. Pick one of the two mods per build.
 
-## Development and compatibility
+## If something goes wrong
 
-The installer adds GDScript modules and targeted game hooks to a locally recovered project, then exports it with Godot. Game resources are loaded from the installed game, rather than included in the mod.
+- **The game log** is in `%APPDATA%\YeahMaybe\ChoicerVoicer\logs` on Windows and `~/Library/Application Support/YeahMaybe/ChoicerVoicer/logs` on Mac. Download and video errors are written there.
+- **Can't connect:** check the port, the firewall and that everyone runs version 1.1.9. Tailscale avoids most router problems.
+- **Open an issue** with the log attached.
 
-See [testing and compatibility](VALIDATION.md) for checks and current limitations. The Windows installer and a complete Mac–Windows match still need testing for this fork.
+[Testing and compatibility](VALIDATION.md) lists what has been tested so far. The Windows installer of this fork hasn't had a full end-to-end test yet, and playing Mac against Windows hasn't been tested.
+
+## How it works
+
+The installer recovers the game's project from your own copy with GDRETools, adds this mod's scripts and a few small hooks into the game's scripts, and exports a new executable with Godot. The game's art, sound and fonts are loaded from your copy at runtime. None of them are included in this repository.
 
 ## Unofficial project
 

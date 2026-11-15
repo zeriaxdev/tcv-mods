@@ -16,6 +16,7 @@ var start_button: GAME_BUTTON
 var dub_button: GAME_BUTTON
 var ready_button: CheckButton
 var status_label: Label
+var _mode_hint: Label
 var warning_label: Label
 var player_rows: VBoxContainer
 var _tabs: ButtonArray
@@ -139,6 +140,11 @@ func _build_ui() -> void:
 	dub_button.text = "Dub Mode"
 	dub_button.pressed.connect(_on_start_dub)
 	play_actions.add_child(dub_button)
+	# Says why the mode buttons are gray instead of leaving them looking broken.
+	_mode_hint = Label.new()
+	_mode_hint.text = "The game modes unlock once another player joins."
+	_mode_hint.modulate = Color(1, 1, 1, 0.7)
+	_roster_body.add_child(_mode_hint)
 	status_label = Label.new()
 	status_label.text = "Not connected."
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -289,6 +295,7 @@ func _refresh() -> void:
 	start_button.disabled = Net.slot_count() < 2
 	dub_button.visible = Net.is_host()
 	dub_button.disabled = Net.slot_count() < 2
+	_mode_hint.visible = Net.is_host() and Net.slot_count() < 2
 
 	for child: Node in player_rows.get_children():
 		player_rows.remove_child(child)
