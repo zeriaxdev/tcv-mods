@@ -21,7 +21,7 @@ struct DubPack: Decodable, Identifiable {
     var picture: String {
         let components = fps.split(separator: "/").compactMap { Double($0) }
         let rate = components.count == 2 && components[1] != 0 ? String(format: "%.2f", components[0] / components[1]) : "source"
-        return "\(width) × \(height) · \(rate) fps · \(Int(duration)) seconds"
+        return "\(width) × \(height), \(rate) fps, \(Int(duration)) seconds"
     }
 }
 struct LibraryResult: Decodable { let packs: [DubPack] }
