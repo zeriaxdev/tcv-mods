@@ -7,6 +7,9 @@ extends Node
 signal pack_ready(pack_id: String, local_path: String)
 signal state_changed
 
+const STYLE = preload("res://net/choicer_style.gd")
+const GAME_BUTTON = preload("res://net/choicer_button.gd")
+
 const CACHE_ROOT: String = "user://multiplayer_pack_cache"
 const COMPLETE_MARKER: String = ".net-pack-complete"
 
@@ -70,10 +73,10 @@ var _warning_box: PanelContainer
 var _warning: Label
 var _roster_box: PanelContainer
 var _roster: Label
-var _force_download_box: CheckBox
+var _force_download_box: CheckButton
 var _progress: ProgressBar
-var _primary: Button
-var _secondary: Button
+var _primary: Control
+var _secondary: Control
 
 # Used only by the headless network smoke test. Production always requires the
 # client and host to press the visible buttons.
@@ -1039,18 +1042,23 @@ func _build_ui() -> void:
 	_layer.add_child(_modal_root)
 
 	var backdrop: = ColorRect.new()
-	backdrop.color = Color(0.015, 0.025, 0.055, 0.82)
+	backdrop.color = Color(0, 0, 0, 0.65)
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_modal_root.add_child(backdrop)
 
-	var center: = CenterContainer.new()
+	_modal_root.theme = STYLE.make_theme()
+	for kind: String in ["Label", "CheckButton"]:
+		for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			_modal_root.theme.set_color(state, kind, Color.WHITE)
+	var center: = MarginContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["left", "right", "top", "bottom"]:
+		center.add_theme_constant_override("margin_" + side, 58)
 	_modal_root.add_child(center)
 
 	_panel = PanelContainer.new()
-	_panel.custom_minimum_size = Vector2(700, 0)
-	_panel.add_theme_stylebox_override("panel", _style_box(
-		Color("111827"), 14, Color("3b4b6b"), 1, 0))
+	_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	STYLE.dark_panel(_panel)
 	_panel.visible = false
 	center.add_child(_panel)
 
@@ -1063,45 +1071,48 @@ func _build_ui() -> void:
 	column.add_theme_constant_override("separation", 12)
 	margin.add_child(column)
 
-	var eyebrow: = Label.new()
-	eyebrow.text = "MULTIPLAYER  •  DUB MODE"
-	eyebrow.add_theme_font_size_override("font_size", 13)
-	eyebrow.add_theme_color_override("font_color", Color("61c4ff"))
-	column.add_child(eyebrow)
-
 	_title = Label.new()
-	_title.add_theme_font_size_override("font_size", 28)
+	_title.add_theme_font_size_override("font_size", 20)
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_title.add_theme_color_override("font_color", Color("f3f5fb"))
 	column.add_child(_title)
+	column.add_child(HSeparator.new())
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 12)
+	scroll.add_child(content)
 
 	_detail = Label.new()
 	_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_detail.add_theme_color_override("font_color", Color("c5ccda"))
-	column.add_child(_detail)
+	_detail.add_theme_color_override("font_color", Color.WHITE)
+	content.add_child(_detail)
 
 	_warning_box = PanelContainer.new()
-	_warning_box.add_theme_stylebox_override("panel", _style_box(
-		Color("352d19"), 8, Color("8c7130"), 1, 12))
-	column.add_child(_warning_box)
+	_warning_box.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	content.add_child(_warning_box)
 	_warning = Label.new()
 	_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_warning.add_theme_color_override("font_color", Color("ffd36a"))
 	_warning_box.add_child(_warning)
 
 	_roster_box = PanelContainer.new()
-	_roster_box.add_theme_stylebox_override("panel", _style_box(
-		Color("192235"), 8, Color("33425f"), 1, 12))
-	column.add_child(_roster_box)
+	_roster_box.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	content.add_child(_roster_box)
 	_roster = Label.new()
 	_roster.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_roster.add_theme_color_override("font_color", Color("edf1f8"))
+	_roster.add_theme_color_override("font_color", Color.WHITE)
 	_roster_box.add_child(_roster)
 
-	_force_download_box = CheckBox.new()
+	_force_download_box = CheckButton.new()
 	_force_download_box.text = "Force fresh download for testing"
 	_force_download_box.tooltip_text = ("Ignore installed and cached copies for this offer. "
 		+ "Clients must still accept the download.")
-	column.add_child(_force_download_box)
+	content.add_child(_force_download_box)
 
 	_progress = ProgressBar.new()
 	_progress.show_percentage = true
@@ -1112,48 +1123,13 @@ func _build_ui() -> void:
 	buttons.add_theme_constant_override("separation", 8)
 	column.add_child(buttons)
 
-	_primary = Button.new()
-	_style_button(_primary, true)
+	_primary = GAME_BUTTON.new()
 	_primary.pressed.connect(_on_primary)
 	buttons.add_child(_primary)
 
-	_secondary = Button.new()
-	_style_button(_secondary, false)
+	_secondary = GAME_BUTTON.new()
 	_secondary.pressed.connect(_on_secondary)
 	buttons.add_child(_secondary)
-
-
-func _style_button(button: Button, primary: bool) -> void:
-	var accent: Color = Color("61c4ff")
-	button.custom_minimum_size = Vector2(120, 40)
-	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_color_override("font_color", Color("071019") if primary else Color("f3f5fb"))
-	button.add_theme_color_override("font_hover_color", Color("071019") if primary else Color("f3f5fb"))
-	button.add_theme_stylebox_override("normal", _style_box(
-		accent if primary else Color("202b42"), 7, accent if primary else Color("3b4b6b"), 1, 10))
-	button.add_theme_stylebox_override("hover", _style_box(
-		accent.lightened(0.15) if primary else Color("293650"), 7, accent, 1, 10))
-	button.add_theme_stylebox_override("pressed", _style_box(
-		accent.darkened(0.1) if primary else Color("1b263b"), 7, accent, 2, 10))
-
-
-func _style_box(color: Color, radius: int, border: Color, width: int, margin_size: int) -> StyleBoxFlat:
-	var box: = StyleBoxFlat.new()
-	box.bg_color = color
-	box.corner_radius_top_left = radius
-	box.corner_radius_top_right = radius
-	box.corner_radius_bottom_left = radius
-	box.corner_radius_bottom_right = radius
-	box.border_width_left = width
-	box.border_width_right = width
-	box.border_width_top = width
-	box.border_width_bottom = width
-	box.border_color = border
-	box.content_margin_left = margin_size
-	box.content_margin_right = margin_size
-	box.content_margin_top = margin_size
-	box.content_margin_bottom = margin_size
-	return box
 
 
 func _show_panel() -> void:

@@ -4,7 +4,9 @@ extends Control
 
 signal begin_requested
 
-const INSET: int = 56
+const INSET: int = 58
+const STYLE = preload("res://net/choicer_style.gd")
+const GAME_BUTTON = preload("res://net/choicer_button.gd")
 
 # set by dub_mode before this is added to the tree.
 var characters: PackedStringArray = []
@@ -13,8 +15,8 @@ var _boxes: Dictionary = {}
 var roster_rows: VBoxContainer
 var status_label: Label
 var warning_label: Label
-var begin_button: Button
-var auto_button: Button
+var begin_button: Control
+var auto_button: Control
 var backdrop: ColorRect
 var column: VBoxContainer
 
@@ -42,7 +44,7 @@ func _fit() -> void:
 
 func _build_ui() -> void:
 	backdrop = ColorRect.new()
-	backdrop.color = Color(0.05, 0.05, 0.09, 0.96)
+	backdrop.color = Color(0, 0, 0, 0.65)
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(backdrop)
 
@@ -52,24 +54,47 @@ func _build_ui() -> void:
 		margin.add_theme_constant_override("margin_" + side, INSET)
 	add_child(margin)
 
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	STYLE.dark_panel(panel)
+	margin.add_child(panel)
+	var inset := MarginContainer.new()
+	for side: String in ["left", "right", "top", "bottom"]:
+		inset.add_theme_constant_override("margin_" + side, 24)
+	panel.add_child(inset)
+	theme = STYLE.make_theme()
+	for kind: String in ["Label", "CheckButton"]:
+		for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			theme.set_color(state, kind, Color.WHITE)
 	column = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
-	margin.add_child(column)
+	inset.add_child(column)
 
 	var title: = Label.new()
-	title.text = "WHO ARE YOU DUBBING?"
-	title.add_theme_font_size_override("font_size", 32)
+	title.text = "Choose characters"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
 	column.add_child(title)
+	column.add_child(HSeparator.new())
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 12)
+	scroll.add_child(content)
 
 	var blurb: = Label.new()
-	blurb.text = "Tick the characters you want. Every clip goes to whoever took that character; anything left over is shared out evenly."
+	blurb.text = "Choose your characters. Unclaimed clips are shared evenly."
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.add_theme_font_size_override("font_size", 14)
 	blurb.add_theme_color_override("font_color", Color(0.72, 0.72, 0.8))
-	column.add_child(blurb)
+	content.add_child(blurb)
 
 	var picks: = HFlowContainer.new()
 	picks.add_theme_constant_override("h_separation", 14)
-	column.add_child(picks)
+	content.add_child(picks)
 
 	if characters.is_empty():
 		var none: = Label.new()
@@ -78,7 +103,7 @@ func _build_ui() -> void:
 		picks.add_child(none)
 
 	for character: String in characters:
-		var box: = CheckBox.new()
+		var box: = CheckButton.new()
 		box.text = character
 		box.toggled.connect(_on_box_toggled.unbind(1))
 		picks.add_child(box)
@@ -87,27 +112,26 @@ func _build_ui() -> void:
 	var roster_title: = Label.new()
 	roster_title.text = "Casting"
 	roster_title.add_theme_font_size_override("font_size", 22)
-	column.add_child(roster_title)
+	content.add_child(roster_title)
 
 	roster_rows = VBoxContainer.new()
-	column.add_child(roster_rows)
+	content.add_child(roster_rows)
 
 	warning_label = Label.new()
 	warning_label.add_theme_color_override("font_color", Color("ffcc44"))
 	warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warning_label.custom_minimum_size.x = 720
-	column.add_child(warning_label)
+	content.add_child(warning_label)
 
 	var buttons: = HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	column.add_child(buttons)
 
-	auto_button = Button.new()
-	auto_button.text = "Split the cast for us"
+	auto_button = GAME_BUTTON.new()
+	auto_button.text = "Assign evenly"
 	auto_button.pressed.connect(_on_auto_split)
 	buttons.add_child(auto_button)
 
-	begin_button = Button.new()
+	begin_button = GAME_BUTTON.new()
 	begin_button.text = "Begin dub"
 	begin_button.pressed.connect(func() -> void: begin_requested.emit())
 	buttons.add_child(begin_button)
@@ -137,7 +161,7 @@ func _on_auto_split() -> void:
 func _sync_boxes_from_roles() -> void:
 	var mine: PackedStringArray = Net.characters_for_slot(maxi(0, Net.my_slot()))
 	for character: String in characters:
-		var box: CheckBox = _boxes[character]
+		var box: BaseButton = _boxes[character]
 		var want: bool = mine.has(character)
 		if box.button_pressed == want: continue
 		box.set_block_signals(true)
