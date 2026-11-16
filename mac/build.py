@@ -72,15 +72,21 @@ def repair_paths(project: Path) -> int:
     return repaired
 
 
-DUB_SCREEN_16_9 = '''\t# 16:10 (Mac builds): everything here but the background was placed against a
-\t# 1152x648 screen, some from the top and some from the bottom, so extra height
-\t# pulled the caption into the waveform. Keep them in that box, centered.
-\tfor part: Node in $Visuals.get_children():
-\t\tif part.name == "Scanlines" or not part is Control: continue
-\t\tfor side: Array in [["left", 1152.0], ["right", 1152.0], ["top", 648.0], ["bottom", 648.0]]:
-\t\t\tvar at: float = part.get("anchor_" + side[0]) * side[1] + part.get("offset_" + side[0])
-\t\t\tpart.set("anchor_" + side[0], 0.5)
-\t\t\tpart.set("offset_" + side[0], at - side[1] / 2.0)
+DUB_SCREEN_16_9 = '''\t# 16:10 (Mac builds): this screen places some parts from the top and some from
+\t# the bottom of a 1152x648 screen, so extra height pulled the caption into the
+\t# waveform. Keep the whole layout in that box, centered, and let only the
+\t# background reach the screen edges.
+\tvar extra: Vector2 = (get_viewport_rect().size - Vector2(1152, 648)) / 2.0
+\tif extra.length() > 0.5:
+\t\t$Visuals.set_anchors_preset(Control.PRESET_CENTER)
+\t\t$Visuals.offset_left = -576.0
+\t\t$Visuals.offset_right = 576.0
+\t\t$Visuals.offset_top = -324.0
+\t\t$Visuals.offset_bottom = 324.0
+\t\t$Visuals/Scanlines.offset_left = -extra.x
+\t\t$Visuals/Scanlines.offset_right = extra.x
+\t\t$Visuals/Scanlines.offset_top = -extra.y
+\t\t$Visuals/Scanlines.offset_bottom = extra.y
 '''
 
 
