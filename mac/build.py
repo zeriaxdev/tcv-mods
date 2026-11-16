@@ -182,6 +182,10 @@ def main(argv: list[str] | None = None) -> int:
         settings = project / "project.godot"
         settings.write_text(settings.read_text().replace(
             "[rendering]", "[rendering]\ntextures/vram_compression/import_etc2_astc=true", 1))
+        # Macs are 16:10 (below the notch too). The game is laid out for 16:9 and
+        # letterboxes; "expand" lets its anchored layouts grow to fill the screen.
+        settings.write_text(settings.read_text().replace(
+            "[display]", '[display]\nwindow/stretch/aspect="expand"', 1))
         if args.icon:
             shutil.copy2(args.icon, project / "cv_mac_icon.icns")
             settings.write_text(settings.read_text().replace(
