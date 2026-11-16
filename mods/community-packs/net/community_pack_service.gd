@@ -8,6 +8,7 @@ func _ready() -> void:
  downloads = preload("res://net/community_pack_queue.gd").new()
  downloads.configure(self)
  add_child(downloads)
+ add_child(preload("res://net/screen_fit.gd").new())
  var layer := CanvasLayer.new()
  layer.layer = 128
  add_child(layer)

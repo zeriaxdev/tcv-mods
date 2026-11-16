@@ -72,33 +72,6 @@ def repair_paths(project: Path) -> int:
     return repaired
 
 
-DUB_SCREEN_16_9 = '''\t# 16:10 (Mac builds): this screen places some parts from the top and some from
-\t# the bottom of a 1152x648 screen, so extra height pulled the caption into the
-\t# waveform. Keep the whole layout in that box, centered, and let only the
-\t# background reach the screen edges.
-\tvar extra: Vector2 = (get_viewport_rect().size - Vector2(1152, 648)) / 2.0
-\tif extra.length() > 0.5:
-\t\t$Visuals.set_anchors_preset(Control.PRESET_CENTER)
-\t\t$Visuals.offset_left = -576.0
-\t\t$Visuals.offset_right = 576.0
-\t\t$Visuals.offset_top = -324.0
-\t\t$Visuals.offset_bottom = 324.0
-\t\t$Visuals/Scanlines.offset_left = -extra.x
-\t\t$Visuals/Scanlines.offset_right = extra.x
-\t\t$Visuals/Scanlines.offset_top = -extra.y
-\t\t$Visuals/Scanlines.offset_bottom = extra.y
-'''
-
-
-def keep_dub_screen_in_16_9(project: Path) -> None:
-    script = project / "scenes/gameplay/dub_mode/main/dub_mode.gd"
-    text = script.read_text()
-    marker = "func _ready() -> void :\n"
-    if text.count(marker) != 1:
-        raise ValueError("The dub screen's script changed, so it can't be fitted to 16:10. Update mac/build.py.")
-    script.write_text(text.replace(marker, marker + DUB_SCREEN_16_9, 1))
-
-
 def apply_mod(project: Path, repository: Path, features: list[str] | None) -> list[str]:
     installer = repository.resolve() / "install_mod.py"
     if not installer.is_file():
@@ -209,11 +182,6 @@ def main(argv: list[str] | None = None) -> int:
         settings = project / "project.godot"
         settings.write_text(settings.read_text().replace(
             "[rendering]", "[rendering]\ntextures/vram_compression/import_etc2_astc=true", 1))
-        # Macs are 16:10 (below the notch too). The game is laid out for 16:9 and
-        # letterboxes; "expand" lets its anchored layouts grow to fill the screen.
-        settings.write_text(settings.read_text().replace(
-            "[display]", '[display]\nwindow/stretch/aspect="expand"', 1))
-        keep_dub_screen_in_16_9(project)
         if args.icon:
             shutil.copy2(args.icon, project / "cv_mac_icon.icns")
             settings.write_text(settings.read_text().replace(
