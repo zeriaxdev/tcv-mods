@@ -72,6 +72,27 @@ def repair_paths(project: Path) -> int:
     return repaired
 
 
+DUB_SCREEN_16_9 = '''\t# 16:10 (Mac builds): everything here but the background was placed against a
+\t# 1152x648 screen, some from the top and some from the bottom, so extra height
+\t# pulled the caption into the waveform. Keep them in that box, centered.
+\tfor part: Node in $Visuals.get_children():
+\t\tif part.name == "Scanlines" or not part is Control: continue
+\t\tfor side: Array in [["left", 1152.0], ["right", 1152.0], ["top", 648.0], ["bottom", 648.0]]:
+\t\t\tvar at: float = part.get("anchor_" + side[0]) * side[1] + part.get("offset_" + side[0])
+\t\t\tpart.set("anchor_" + side[0], 0.5)
+\t\t\tpart.set("offset_" + side[0], at - side[1] / 2.0)
+'''
+
+
+def keep_dub_screen_in_16_9(project: Path) -> None:
+    script = project / "scenes/gameplay/dub_mode/main/dub_mode.gd"
+    text = script.read_text()
+    marker = "func _ready() -> void :\n"
+    if text.count(marker) != 1:
+        raise ValueError("The dub screen's script changed, so it can't be fitted to 16:10. Update mac/build.py.")
+    script.write_text(text.replace(marker, marker + DUB_SCREEN_16_9, 1))
+
+
 def apply_mod(project: Path, repository: Path, features: list[str] | None) -> list[str]:
     installer = repository.resolve() / "install_mod.py"
     if not installer.is_file():
@@ -186,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         # letterboxes; "expand" lets its anchored layouts grow to fill the screen.
         settings.write_text(settings.read_text().replace(
             "[display]", '[display]\nwindow/stretch/aspect="expand"', 1))
+        keep_dub_screen_in_16_9(project)
         if args.icon:
             shutil.copy2(args.icon, project / "cv_mac_icon.icns")
             settings.write_text(settings.read_text().replace(
