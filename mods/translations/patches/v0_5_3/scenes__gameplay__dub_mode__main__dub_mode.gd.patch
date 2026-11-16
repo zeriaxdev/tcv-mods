@@ -1,0 +1,5 @@
+--- a/scenes/gameplay/dub_mode/main/dub_mode.gd
++++ b/scenes/gameplay/dub_mode/main/dub_mode.gd
+@@ -144,1 +144,1 @@
+-	lbl_caption.modulate.a = 0.0;lbl_caption.text = active_clip.clip_caption; var tween: Tween = create_tween();tween.tween_property(lbl_caption, "modulate:a", 1.0, 0.5)
++	lbl_caption.modulate.a = 0.0;preload("res://net/pack_translation.gd").show_caption(lbl_caption, active_clip, resource.pack_info); var tween: Tween = create_tween();tween.tween_property(lbl_caption, "modulate:a", 1.0, 0.5)

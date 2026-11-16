@@ -1,6 +1,6 @@
 # tcv-mods
 
-Online multiplayer, an in-game dub pack browser and video saving for The Choicer Voicer.
+Online multiplayer, an in-game dub pack browser, video saving and caption translations for The Choicer Voicer.
 
 Also on [GameBanana](https://gamebanana.com/mods/741068).
 
@@ -32,6 +32,7 @@ This repository started as a fork of [Appolo's multiplayer mod](https://github.c
 | **Community Packs** | Search, download and remove GameBanana dub packs from the main menu. ZIP, RAR and 7z packs all work, downloads keep going in the background, and slow download servers are skipped. | Always included |
 | **Multiplayer** | Host or join Gameshow and Dub Mode online, and share packs with the players in your lobby. Includes the fix for silent mic recordings on Windows. | Community Packs |
 | **Save as video** | **Save Dub** also turns your dub into an MP4 with your voice mixed in. The button fills up while it works, then says **Open video**. | Python 3 and FFmpeg |
+| **Translations** | Translate a dub pack's captions into your own language. Dub Mode shows your translation with the pack's original caption under it. The pack itself stays as it is. | Nothing |
 
 ![Online menu](docs/screenshots/online-menu.jpg)
 
@@ -105,6 +106,19 @@ Open **Community packs** from the main menu.
 
 Press **Save Dub** after a dub. The video goes to `Choicer Voicer Exports` in your Videos folder (`Movies` on macOS): an H.264 MP4 at the pack's own resolution, with a lossless WAV next to it. If it fails, the button says **Retry video**. **No exporter** means the game was built without this feature, and **Needs Python** means Python is missing.
 
+### Translations
+
+Pick a pack in Dub Mode and press **Translation** next to **Start**.
+
+1. **Export script** saves the pack's captions as a text file, one line per clip:
+   ```
+   1 | 01_intro.wav | Clark | Hello there.\nHow are you?
+   ```
+2. Translate the caption at the end of each line, by hand or by pasting the whole file into a translator and copying the result back. Leave the number, file name and character alone. `\n` starts a new line inside a caption.
+3. **Import translation** loads the file. Lines you skipped keep the original caption.
+
+The translation is saved on your computer in `translations/<pack folder>/translation.txt` (see [Where your files are](#where-your-files-are)), never in the pack, so online games still see the same pack. To dub together in your language, send your friends the translated file and have each of them import it. **Remove** goes back to the original captions.
+
 ### Export older dubs, or back them up
 
 The `exporter` folder works on its own, on every system:
@@ -148,7 +162,7 @@ Backups only ever add files. Nothing is deleted, unchanged files are skipped, an
 | macOS (built with `mac/build.py`, since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
 | Linux | `~/.local/share/YeahMaybe/ChoicerVoicer` |
 
-Inside it, `game/packs_voice` holds the dub packs, `game/recordings/dub_recordings` your saved dubs, and `logs` the game log.
+Inside it, `game/packs_voice` holds the dub packs, `game/recordings/dub_recordings` your saved dubs, `translations` your caption translations, and `logs` the game log.
 
 ## Troubleshooting
 

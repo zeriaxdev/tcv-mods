@@ -30,6 +30,7 @@ FEATURES = {
     "community-packs": "Community Packs: browse and download dub packs from GameBanana in the game",
     "multiplayer": "Online multiplayer: play Gameshow and Dub Mode with friends online",
     "save-as-video": "Save as video: Save Dub also makes an MP4 of your dub (needs Python and FFmpeg)",
+    "translations": "Translations: translate a dub pack's captions and see both in Dub Mode",
 }
 REQUIRES = {"multiplayer": ["community-packs"]}  # pack sharing uses the pack downloader
 AUTOLOADS = {
@@ -685,7 +686,7 @@ def ask_features() -> list[str] | None:
     print("\nWhich features do you want? Press Enter for yes.")
     chosen = ["community-packs"]
     print(f"  {FEATURES['community-packs']}: always included")
-    for feature in ["multiplayer", "save-as-video"]:
+    for feature in ["multiplayer", "save-as-video", "translations"]:
         answer = input(f"  {FEATURES[feature]}? [Y/n] ").strip().lower()
         if answer in ("", "y", "yes"):
             chosen.append(feature)

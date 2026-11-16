@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--godot", required=True, type=Path, help="Official Godot 4.4.1 .app or executable")
     parser.add_argument("--gdre", required=True, type=Path, help="GDRETools 2.6.3 .app or executable")
     parser.add_argument("--templates", required=True, type=Path, help="Godot 4.4.1 standard export templates .tpz or macos.zip")
-    parser.add_argument("--features", help="comma-separated: community-packs,multiplayer,save-as-video (default: all)")
+    parser.add_argument("--features", help="comma-separated: community-packs,multiplayer,save-as-video,translations (default: all)")
     parser.add_argument("--no-mods", action="store_true", help="build the plain game without any mods")
     parser.add_argument("--icon", type=Path, help="Optional local .icns file; no icon is included in this repository")
     parser.add_argument("--output", type=Path, default=ROOT / "work" / "The Choicer Voicer.app")

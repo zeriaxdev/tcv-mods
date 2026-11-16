@@ -1,0 +1,5 @@
+--- a/scenes/nav_specific/clip_selector_menus/modules/clip_controls_dub.gd
++++ b/scenes/nav_specific/clip_selector_menus/modules/clip_controls_dub.gd
+@@ -49,1 +49,2 @@
+ 	loading_screen.hide();main.show();spin_wheel_animator.stop()
++	preload("res://net/pack_translation.gd").add_button(btn_start, pack, omni_clip_array.data)
