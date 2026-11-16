@@ -35,6 +35,7 @@ var _loading_detail: bool = false
 
 var _search: LineEdit
 var _sort: OptionButton
+var _category: OptionButton
 var _rated: CheckButton
 var _page_label: Label
 var _list_status: Label
@@ -53,6 +54,8 @@ var _install_progress: ProgressBar
 var _install_button: GAME_BUTTON
 var _uninstall_button: GAME_BUTTON
 var _open_button: GAME_BUTTON
+var _guide_button: GAME_BUTTON
+var _guide_type: String = ""
 var _installed_button: GAME_BUTTON
 var _downloads_button: GAME_BUTTON
 var _online_downloads_box: CheckButton
@@ -69,6 +72,8 @@ var _selected_job: String = ""
 
 
 func _ready() -> void:
+	if _return_menu_data != null: menu_data = _return_menu_data.duplicate()  # back from a guide
+	_return_menu_data = null
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	_fit_to_viewport()
 	get_viewport().size_changed.connect(_fit_to_viewport)
@@ -105,7 +110,9 @@ func _exit_tree() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"): return
 	get_viewport().set_input_as_handled()
-	closed.emit()
+	if closed.get_connections().is_empty() and get_parent().get_parent().has_method("new_slide_from_data"):
+		get_parent().get_parent().new_slide_from_data()  # reopened from a guide: nobody listens
+	else: closed.emit()
 
 
 func _build_ui() -> void:
@@ -170,12 +177,22 @@ func _build_ui() -> void:
 	search_button.pressed.connect(func() -> void: _on_search_submitted(_search.text))
 	tools.add_child(search_button)
 	var filter_slot := Control.new()
-	filter_slot.custom_minimum_size.y = 92
+	filter_slot.custom_minimum_size.y = 144
 	navigation.add_child(filter_slot)
 	var browse_filters := VBoxContainer.new()
 	browse_filters.add_theme_constant_override("separation", 12)
 	browse_filters.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	filter_slot.add_child(browse_filters)
+	# pack type, in the same game-styled dropdown as the sort order
+	_category = OptionButton.new()
+	for category: Dictionary in CATALOG_SCRIPT.CATEGORIES:
+		_category.add_item(str(category["label"]))
+		_category.set_item_metadata(_category.item_count - 1, int(category["id"]))
+	_category.tooltip_text = "Which kind of pack to show. Installing puts each pack in its own folder."
+	_category.item_selected.connect(func(_index: int) -> void:
+		_page = 1
+		_load_page())
+	browse_filters.add_child(_category)
 	_sort = OptionButton.new()
 	_sort.add_item("Newest")
 	_sort.set_item_metadata(0, "Generic_Newest")
@@ -357,6 +374,11 @@ func _build_ui() -> void:
 		var url: String = str(_selected.get("profile_url", ""))
 		if url.begins_with("https://gamebanana.com/"): OS.shell_open(url))
 	detail_buttons.add_child(_open_button)
+	_guide_button = _button("Guide", false)
+	_guide_button.tooltip_text = "How this kind of pack is put together, from Modpack Guides."
+	_guide_button.visible = false
+	_guide_button.pressed.connect(_open_guide)
+	detail_buttons.add_child(_guide_button)
 	var caution: = Label.new()
 	caution.text = ("Downloads are community content. ZIP, RAR and 7z archives are staged and checked before installation, "
 		+ "but only install packs from creators you trust.")
@@ -382,14 +404,19 @@ func _load_page(force: bool = false) -> void:
 	_records.clear()
 	_render_list()
 	if _query.is_empty():
-		_catalog.fetch_page(_page, str(_sort.get_item_metadata(_sort.selected)), force)
+		_catalog.fetch_page(_page, str(_sort.get_item_metadata(_sort.selected)), force, _category_id())
 	else:
-		_catalog.search(_query, _page, "best_match", force)
+		_catalog.search(_query, _page, "best_match", force, _category_id())
+
+
+func _category_id() -> int:
+	return int(_category.get_item_metadata(_category.selected)) if _category.selected >= 0 else 0
 
 
 func _set_list_busy(busy: bool) -> void:
 	_search.editable = not busy
 	_sort.disabled = busy or not _query.is_empty()
+	_category.disabled = busy
 	_previous.disabled = busy or _page <= 1
 	_next.disabled = busy or _complete
 	if busy: _list_status.text = "Loading from GameBanana..."
@@ -408,7 +435,7 @@ func _on_page_loaded(payload: Dictionary) -> void:
 	_previous.disabled = _page <= 1
 	_next.disabled = _complete
 	var total: int = int(payload.get("total", 0))
-	_list_status.text = "%s%d dub pack%s" % [
+	_list_status.text = "%s%d pack%s" % [
 		"About " if not _complete else "", total, "" if total == 1 else "s"]
 	_render_list()
 
@@ -420,8 +447,8 @@ func _render_list() -> void:
 	for record: Dictionary in _records:
 		if bool(record.get("content_rated", false)) and not _rated.button_pressed: continue
 		var item := _list.create_item(root_item)
-		item.set_text(0, str(record.get("name", "Dub pack")))
-		item.set_tooltip_text(0, "by %s • %s" % [record.get("author", "Unknown"), record.get("subcategory", "Dub Mode")])
+		item.set_text(0, str(record.get("name", "Pack")))
+		item.set_tooltip_text(0, "by %s, %s" % [record.get("author", "Unknown"), _category_text(record)])
 		item.set_metadata(0, record)
 		if int(record.get("id", -1)) == int(_selected.get("id", -2)): item.select(0)
 	if root_item.get_child_count() == 0:
@@ -440,7 +467,7 @@ func _select_record(record: Dictionary) -> void:
 	_detail.clear()
 	_preview.texture = null
 	_preview_placeholder.visible = true
-	_detail_title.text = str(record.get("name", "Dub pack"))
+	_detail_title.text = str(record.get("name", "Pack"))
 	_detail_meta.text = "by %s" % str(record.get("author", "Unknown creator"))
 	_detail_description.text = "Loading description and download files..."
 	_file_picker.clear()
@@ -448,6 +475,7 @@ func _select_record(record: Dictionary) -> void:
 	_install_status.text = ""
 	_install_button.disabled = true
 	_open_button.disabled = false
+	_set_guide_type(CATEGORY_TYPES.get(str(record.get("category", "")), ""))
 	_catalog.fetch_detail(int(record.get("id", 0)))
 	_load_preview(str(record.get("image_url", "")))
 
@@ -459,9 +487,9 @@ func _on_detail_loaded(detail: Dictionary) -> void:
 	for key: Variant in _selected:
 		if not detail.has(key) or str(detail.get(key, "")).is_empty(): detail[key] = _selected[key]
 	_detail = detail
-	_detail_title.text = str(detail.get("name", "Dub pack"))
+	_detail_title.text = str(detail.get("name", "Pack"))
 	var parts: PackedStringArray = ["by %s" % str(detail.get("author", "Unknown creator"))]
-	if not str(detail.get("subcategory", "")).is_empty(): parts.append(str(detail["subcategory"]))
+	if not _category_text(detail).is_empty(): parts.append(_category_text(detail))
 	if not str(detail.get("version", "")).is_empty(): parts.append("version %s" % str(detail["version"]))
 	if bool(detail.get("content_rated", false)): parts.append("CONTENT-RATED")
 	_detail_meta.text = "  •  ".join(parts)
@@ -512,7 +540,9 @@ func _refresh_install_action() -> void:
 		_install_button.text = "Installed"
 		_install_button.disabled = true
 		_install_progress.visible = false
-		_install_status.text = "Installed in %s" % installed
+		var folders: PackedStringArray = INSTALLER_SCRIPT.installed_paths(mod_id)
+		_install_status.text = ("Installed in %s" % installed if folders.size() <= 1
+			else "Installed in %d folders, starting with %s" % [folders.size(), installed])
 		if _mod_has_active_job(mod_id):
 			_install_status.text += "\nA download for this submission is still active."
 		_install_status.add_theme_color_override("font_color", SUCCESS)
@@ -627,6 +657,7 @@ func _set_view(mode: String) -> void:
 	_search.editable = true
 	_paging.visible = mode == "browse"
 	_sort.visible = mode == "browse"
+	_category.visible = mode == "browse"
 	_rated.visible = mode == "browse"
 	_online_downloads_box.visible = mode == "downloads"
 	_detail_content.hide()
@@ -687,15 +718,16 @@ func _render_installed() -> void:
 	if _view_mode != "installed": return
 	_list.clear()
 	var root_item := _list.create_item()
-	var packs: Array[Dictionary] = INSTALLER_SCRIPT.installed_packs()
+	var packs: Array[Dictionary] = _installed_submissions()
 	var total := packs.size()
 	var query := _search.text.strip_edges().to_lower()
 	if not query.is_empty():
-		packs = packs.filter(func(pack: Dictionary): return ("%s %s %s" % [pack.get("name", ""), pack.get("author", ""), pack.get("folder", "")]).to_lower().contains(query))
+		packs = packs.filter(func(pack: Dictionary): return ("%s %s %s" % [pack.get("name", ""), pack.get("author", ""), " ".join(PackedStringArray(pack.get("folder_names", [])))]).to_lower().contains(query))
 	_list_status.text = "Installed packs (%d)" % packs.size() if query.is_empty() else "Installed packs (%d of %d)" % [packs.size(), total]
 	for pack: Dictionary in packs:
 		var item := _list.create_item(root_item)
-		item.set_text(0, str(pack.get("name", pack.get("folder", "Dub pack"))))
+		item.set_text(0, str(pack.get("name", pack.get("folder", "Pack"))))
+		item.set_tooltip_text(0, _types_summary(pack.get("folders", [])))
 		item.set_metadata(0, pack)
 	if packs.is_empty():
 		var item := _list.create_item(root_item)
@@ -703,18 +735,103 @@ func _render_installed() -> void:
 		item.set_selectable(0, false)
 
 
+# one entry per GameBanana submission: a compilation installs several folders.
+static func _installed_submissions() -> Array[Dictionary]:
+	var by_mod: Dictionary = {}
+	var out: Array[Dictionary] = []
+	for pack: Dictionary in INSTALLER_SCRIPT.installed_packs():
+		var mod_id: int = int(pack.get("mod_id", 0))
+		if not by_mod.has(mod_id):
+			var group: Dictionary = pack.duplicate(true)
+			group["folders"] = []
+			group["folder_names"] = []
+			group["installed_bytes"] = 0
+			by_mod[mod_id] = group
+			out.append(group)
+		var group: Dictionary = by_mod[mod_id]
+		group["folders"].append(pack)
+		group["folder_names"].append(str(pack.get("folder", "")))
+		group["installed_bytes"] = int(group["installed_bytes"]) + int(pack.get("installed_bytes", 0))
+	return out
+
+
+# "7 players, 1 host"
+static func _types_summary(folders: Array) -> String:
+	var counts: Dictionary = {}
+	for pack: Variant in folders:
+		var type: String = str(pack.get("type", "dub")) if pack is Dictionary else "dub"
+		counts[type] = int(counts.get(type, 0)) + 1
+	var parts: PackedStringArray = []
+	for type: String in INSTALLER_SCRIPT.TYPE_NAMES:
+		if not counts.has(type): continue
+		var names: Array = INSTALLER_SCRIPT.TYPE_NAMES[type]
+		parts.append("%d %s" % [counts[type], names[0] if counts[type] == 1 else names[1]])
+	return ", ".join(parts)
+
+
+static func _category_text(record: Dictionary) -> String:
+	var category: String = str(record.get("category", ""))
+	var subcategory: String = str(record.get("subcategory", ""))
+	if category.is_empty(): return subcategory
+	if subcategory.is_empty() or subcategory == category: return category
+	return "%s, %s" % [category, subcategory]
+
+
 func _show_installed_detail(pack: Dictionary) -> void:
-	_detail = {"id": pack.get("mod_id", 0), "name": pack.get("name", "Dub pack")}
+	_detail = {"id": pack.get("mod_id", 0), "name": pack.get("name", "Pack")}
 	_selected = {"profile_url": pack.get("profile_url", "")}
 	_detail_content.show()
 	_detail_actions.show()
-	_detail_title.text = str(pack.get("name", "Dub pack"))
-	_detail_meta.text = "by %s • %s" % [pack.get("author", "Unknown"), _format_bytes(int(pack.get("installed_bytes", 0)))]
-	_detail_description.text = "Folder: %s" % pack.get("folder", "")
+	_detail_title.text = str(pack.get("name", "Pack"))
+	_detail_meta.text = "by %s, %s" % [pack.get("author", "Unknown"), _format_bytes(int(pack.get("installed_bytes", 0)))]
+	var lines: PackedStringArray = [_types_summary(pack.get("folders", []))]
+	for folder: Variant in pack.get("folders", []):
+		if folder is Dictionary:
+			lines.append("%s/%s" % [str(folder.get("root", "")).get_file(), folder.get("folder", "")])
+	_detail_description.text = "\n".join(lines)
 	_install_status.text = "Leave online play before uninstalling." if CommunityPacks.is_online() else ""
 	_uninstall_button.show()
 	_uninstall_button.disabled = CommunityPacks.is_online() or _mod_has_active_job(int(pack.get("mod_id", 0)))
 	_open_button.disabled = not str(pack.get("profile_url", "")).begins_with("https://gamebanana.com/")
+	var types: Dictionary = {}
+	for folder: Variant in pack.get("folders", []):
+		if folder is Dictionary: types[str(folder.get("type", "dub"))] = true
+	_set_guide_type(types.keys()[0] if types.size() == 1 else "")
+
+
+# Modpack Guides page for each type, in its page order.
+const GUIDE_PAGES: Dictionary = {
+	"voice": 1, "dub": 2, "menu": 3, "player": 4, "studio": 5, "judges": 6, "host": 7, "chatter": 8}
+# Compilations and Other/Misc mix types, so they get no guide.
+const CATEGORY_TYPES: Dictionary = {
+	"Dub Mode": "dub", "Players": "player", "Menus": "menu", "Hosts": "host", "Judges": "judges"}
+
+
+func _set_guide_type(type: String) -> void:
+	_guide_type = type
+	_guide_button.visible = GUIDE_PAGES.has(type)
+
+
+# Opens the game's Modpack Guides on this type's page. Back from there comes
+# back to this browser.
+func _open_guide() -> void:
+	if not GUIDE_PAGES.has(_guide_type): return
+	var menu: Node = get_parent().get_parent()
+	if not menu.has_method("NewSlide"): return
+	var page: int = GUIDE_PAGES[_guide_type]
+	_return_menu_data = menu_data
+	menu.NewSlide("guides/menu_guide_packs")
+	var guide: Node = menu.get_node("SlideCapsule").get_child(-1)
+	guide.menu_data.back_path = scene_file_path
+	guide.menu_data.assume_path = false
+	guide._on_array_page_selection_selection(page)
+	# after the page list's own deferred select of its first button
+	guide.get_node("Border/HBoxContainer/ArrayPageSelection").call_deferred("select_item", page)
+
+
+# where Back leads once the browser is reopened from a guide: the slide it came
+# from originally, kept across the guide visit.
+static var _return_menu_data: MenuData
 
 
 func _render_downloads() -> void:
@@ -731,7 +848,7 @@ func _render_downloads() -> void:
 	for job: Dictionary in jobs:
 		var item := _list.create_item(root_item)
 		var mod: Dictionary = job.get("mod", {})
-		item.set_text(0, str(mod.get("name", "Dub pack")))
+		item.set_text(0, str(mod.get("name", "Pack")))
 		var size: int = int(job.get("total", 0))
 		item.set_icon(0, _status_icon(str(job.get("state", "")),
 			float(job.get("received", 0)) / size if size > 0 else 0.0))
@@ -814,7 +931,7 @@ func _show_download_detail(job: Dictionary) -> void:
 	var mod: Dictionary = job.get("mod", {})
 	var file: Dictionary = job.get("file", {})
 	_detail_content.show()
-	_detail_title.text = str(mod.get("name", "Dub pack"))
+	_detail_title.text = str(mod.get("name", "Pack"))
 	_detail_meta.text = str(file.get("name", "ZIP"))
 	_detail_description.text = _job_status_text(job)
 	_install_status.text = str(job.get("error", ""))
@@ -866,7 +983,7 @@ func _on_uninstall_pressed() -> void:
 	if mod_id <= 0 or CommunityPacks.is_online() or _mod_has_active_job(mod_id): return
 	_request_uninstall({
 		"mod_id": mod_id,
-		"name": str(_detail.get("name", "Dub pack")),
+		"name": str(_detail.get("name", "Pack")),
 		"path": INSTALLER_SCRIPT.installed_path(mod_id),
 	})
 
@@ -875,9 +992,9 @@ func _request_uninstall(pack: Dictionary) -> void:
 	var mod_id: int = int(pack.get("mod_id", 0))
 	if mod_id <= 0 or CommunityPacks.is_online() or _mod_has_active_job(mod_id): return
 	_pending_uninstall = pack.duplicate(true)
-	_uninstall_dialog.dialog_text = ("Remove '%s' and all files this installer placed in its pack folder?\n\n"
+	_uninstall_dialog.dialog_text = ("Remove '%s' and all files this installer placed in its pack folders?\n\n"
 		+ "Manually installed packs are never removed by this button.") % str(
-			pack.get("name", "Dub pack"))
+			pack.get("name", "Pack"))
 	_uninstall_dialog.popup_centered(Vector2i(560, 190))
 
 

@@ -1,7 +1,7 @@
 extends Node
 # Downloads a GameBanana ZIP into a private staging area, validates its central
-# directory before allocating decompressed data, extracts only inert dub-pack
-# assets, and moves the complete folder into packs_voice in one rename.
+# directory before allocating decompressed data, extracts only inert pack
+# assets, and moves each complete pack folder into its packs_* folder in one rename.
 
 signal progress(received: int, total: int, status: String)
 signal finished(result: Dictionary)
@@ -308,13 +308,12 @@ func _finish_download() -> void:
 		_fail("The downloaded archive failed its checksum. It was not installed.")
 		return
 
-	progress.emit(actual_size, expected_size, "Checking and installing the dub pack...")
+	progress.emit(actual_size, expected_size, "Checking and installing the pack...")
 	var thread: = Thread.new()
-	# Resolve the game autoload on the main thread. The worker only receives an
-	# immutable path and then sticks to its own FileAccess/DirAccess instances.
-	var voice_root: String = str(FileManager.MODPACKS_VOICE)
+	# Resolve the game autoload on the main thread. The worker only receives
+	# immutable paths and then sticks to its own FileAccess/DirAccess instances.
 	var error: Error = thread.start(
-		_validate_and_extract.bind(_download_path, _mod, _file, voice_root, true))
+		_validate_and_extract.bind(_download_path, _mod, _file, type_roots(), true))
 	if error != OK:
 		_fail("Could not start archive validation (%s)." % error_string(error))
 		return
@@ -349,12 +348,14 @@ func _cleanup_download() -> void:
 	_download_path = ""
 
 
+# roots: type -> pack folder, from type_roots(). A String is a stand-in game
+# folder (tests): its packs_* subfolders are used.
 static func _validate_and_extract(
-	archive: String, mod: Dictionary, file: Dictionary, voice_root_override: String = "",
+	archive: String, mod: Dictionary, file: Dictionary, roots: Variant = "",
 	use_registry: bool = true
 ) -> Dictionary:
 	if not (archive.get_file().contains(".rar") or archive.get_file().contains(".7z")):
-		return _validate_and_extract_zip(archive, mod, file, voice_root_override, use_registry)
+		return _validate_and_extract_zip(archive, mod, file, roots, use_registry)
 	# RAR and 7z: the system's bsdtar (macOS /usr/bin/tar, Windows tar.exe) rewrites it as a
 	# ZIP without extracting anything, then the normal ZIP checks decide what installs.
 	# ponytail: no timeout on tar; a RAR bomb costs CPU time here, but the ZIP checks
@@ -367,13 +368,137 @@ static func _validate_and_extract(
 	if code != 0 or not FileAccess.file_exists(converted):
 		if FileAccess.file_exists(converted): DirAccess.remove_absolute(converted)
 		return {"error": "This archive could not be read (%s)." % ("".join(output).strip_edges().left(160) if not output.is_empty() else "tar exit %d" % code)}
-	var result: Dictionary = _validate_and_extract_zip(converted, mod, file, voice_root_override, use_registry)
+	var result: Dictionary = _validate_and_extract_zip(converted, mod, file, roots, use_registry)
 	DirAccess.remove_absolute(converted)
 	return result
 
 
+# Every Customize pack type. The archive's contents decide the type, not its
+# GameBanana category: Compilation Packs and Other/Misc mix them, and one player
+# ZIP can hold seven players.
+const TYPE_FOLDERS: Dictionary = {
+	"dub": "packs_voice", "voice": "packs_voice", "menu": "packs_menu",
+	"player": "packs_player", "studio": "packs_studio", "judges": "packs_judges",
+	"host": "packs_host", "chatter": "packs_chatter",
+}
+const TYPE_NAMES: Dictionary = {
+	"dub": ["Dub Mode pack", "Dub Mode packs"], "voice": ["voice pack", "voice packs"],
+	"menu": ["menu", "menus"], "player": ["player", "players"], "studio": ["studio", "studios"],
+	"judges": ["judges pack", "judges packs"], "host": ["host", "hosts"],
+	"chatter": ["chatter pack", "chatter packs"],
+}
+# archives laid out like the game folder: packs_player/<name>/... (one creator
+# wrote packs_voices)
+const GAME_FOLDER_TYPES: Dictionary = {
+	"packs_voice": "voice", "packs_voices": "voice", "packs_menu": "menu",
+	"packs_player": "player", "packs_studio": "studio", "packs_judges": "judges",
+	"packs_host": "host", "packs_chatter": "chatter",
+}
+# a folder holding one of these is that type's pack. Every Player, Menu, Host and
+# Judges pack checked on GameBanana had its config file. Image names like
+# player.png or host.png are left out: they are also plausible voice clip names.
+const MARKERS: Dictionary = {
+	"config_menu.json": "menu", "config_player.json": "player",
+	"config_judges.json": "judges", "config_host.json": "host",
+	"config_studio.json": "studio", "config_chatter.ini": "chatter",
+	"config_chatter.cfg": "chatter", "model.glb": "studio",
+	"judge1.png": "judges", "judge1.jpg": "judges",
+	"music_menu": "menu", "music_studio": "studio",  # with any audio extension
+}
+# 3D studio models: only GLB, which is self-contained, and only in studio packs.
+const STUDIO_EXTENSIONS: PackedStringArray = ["glb"]
+
+
+static func type_roots(base: String = "") -> Dictionary:
+	var roots: Dictionary = {}
+	if base.is_empty():
+		roots = {
+			"dub": FileManager.MODPACKS_VOICE, "voice": FileManager.MODPACKS_VOICE,
+			"menu": FileManager.MODPACKS_MENU, "player": FileManager.MODPACKS_PLAYER,
+			"studio": FileManager.MODPACKS_STUDIO, "judges": FileManager.MODPACKS_JUDGES,
+			"host": FileManager.MODPACKS_HOST, "chatter": FileManager.MODPACKS_CHATTER,
+		}
+	else:
+		for type: String in TYPE_FOLDERS:
+			roots[type] = base.trim_suffix("/").path_join(TYPE_FOLDERS[type])
+	for type: String in roots:
+		roots[type] = str(roots[type]).replace("\\", "/").trim_suffix("/")
+	return roots
+
+
+static func _roots_from(value: Variant) -> Dictionary:
+	if value is Dictionary and not value.is_empty(): return value
+	return type_roots(str(value) if value is String else "")
+
+
+static func _marker_type(path: String) -> String:
+	var name: String = path.get_file().to_lower()
+	if MARKERS.has(name): return MARKERS[name]
+	if AUDIO_EXTENSIONS.has(name.get_extension()) and MARKERS.has(name.get_basename()):
+		return MARKERS[name.get_basename()]
+	return ""
+
+
+static func _dir_of(path: String) -> String:
+	var dir: String = path.get_base_dir()
+	return "" if dir == "." else dir
+
+
+# the deepest pack folder this file belongs to, or NO_DUB_ROOT for none.
+static func _owner(path: String, packs: Dictionary) -> String:
+	var best: String = NO_DUB_ROOT
+	for root: String in packs:
+		if ((root.is_empty() or path.begins_with(root + "/"))
+			and (best == NO_DUB_ROOT or root.length() > best.length())):
+			best = root
+	return best
+
+
+# archive folder -> type, for every pack in the archive.
+static func find_packs(entries: Array[Dictionary]) -> Dictionary:
+	var files: PackedStringArray = []
+	for entry: Dictionary in entries:
+		var path: String = str(entry.get("path", ""))
+		if not bool(entry.get("directory", false)) and not _junk_path(path): files.append(path)
+	var packs: Dictionary = {}
+	for path: String in files:
+		var parts: PackedStringArray = path.split("/")
+		for i: int in range(parts.size() - 2):  # needs packs_x/<name>/<file>
+			var type: String = GAME_FOLDER_TYPES.get(parts[i].to_lower(), "")
+			if type.is_empty(): continue
+			packs["/".join(parts.slice(0, i + 2))] = type
+			break
+	if packs.is_empty():
+		for config_pass: bool in [true, false]:  # a config file outranks a model or music file beside it
+			for path: String in files:
+				var type: String = _marker_type(path)
+				if type.is_empty() or path.get_file().to_lower().begins_with("config_") != config_pass: continue
+				if not packs.has(_dir_of(path)): packs[_dir_of(path)] = type
+		for path: String in files:
+			if path.get_file().to_lower() == "dub_video.ogv" and _owner(path, packs) == NO_DUB_ROOT:
+				packs[_dir_of(path)] = "dub"
+		if packs.is_empty():
+			var dub_root: String = _find_dub_root(entries)  # older rule: any .ogv beside the most audio
+			if dub_root != NO_DUB_ROOT: packs[dub_root] = "dub"
+		# whatever audio is left is a voice pack, rooted where all of it meets
+		var common: Variant = null
+		for path: String in files:
+			if not AUDIO_EXTENSIONS.has(path.get_extension().to_lower()): continue
+			if _owner(path, packs) != NO_DUB_ROOT: continue
+			var dir: String = _dir_of(path)
+			if common == null: common = dir
+			while not (str(common).is_empty() or dir == common or dir.begins_with(str(common) + "/")):
+				common = _dir_of(str(common))
+		if common != null: packs[str(common)] = "voice"
+	for root: String in packs:  # a voice folder with its video is a dub pack
+		if packs[root] != "voice": continue
+		for path: String in files:
+			if _dir_of(path) == root and path.get_extension().to_lower() == "ogv": packs[root] = "dub"
+	return packs
+
+
 static func _validate_and_extract_zip(
-	archive: String, mod: Dictionary, file: Dictionary, voice_root_override: String = "",
+	archive: String, mod: Dictionary, file: Dictionary, roots_value: Variant = "",
 	use_registry: bool = true
 ) -> Dictionary:
 	var indexed: Dictionary = inspect_zip(archive)
@@ -381,21 +506,30 @@ static func _validate_and_extract_zip(
 	var entries: Array[Dictionary] = []
 	for value: Variant in Array(indexed.get("entries", [])):
 		if value is Dictionary: entries.append(value)
-	var root: String = _find_dub_root(entries)
-	if root == NO_DUB_ROOT:
-		return {"error": "No dub pack was found in the archive. A dub pack needs an OGV video and audio clips."}
+	var found: Dictionary = find_packs(entries)
+	if found.is_empty():
+		return {"error": "No pack the game can use was found in this archive."}
 
-	var chosen: Array[Dictionary] = []
+	var mod_id: int = int(mod.get("id", 0))
+	var registry: Dictionary = load_registry() if use_registry else {}
+	var registered: Dictionary = _as_dictionary(registry.get(str(mod_id), {}))
+	var registered_path: String = str(registered.get("path", ""))
+	if not registered_path.is_empty() and DirAccess.dir_exists_absolute(registered_path):
+		return {"path": registered_path, "already_installed": true}
+
+	# archive folder -> {type, files, bytes, audio, video, seen}
+	var plans: Dictionary = {}
+	for root: String in found:
+		plans[root] = {"type": found[root], "files": [], "bytes": 0, "audio": 0, "video": 0, "seen": {}}
 	var total: int = 0
-	var audio_count: int = 0
-	var video_count: int = 0
-	var seen: Dictionary = {}
 	for entry: Dictionary in entries:
 		if bool(entry.get("directory", false)): continue
 		var path: String = str(entry["path"])
-		if not root.is_empty():
-			if not path.begins_with(root + "/"): continue
-			path = path.substr(root.length() + 1)
+		if _junk_path(path): continue
+		var root: String = _owner(path, plans)
+		if root == NO_DUB_ROOT: continue  # not part of any pack, like a readme beside the packs
+		var plan: Dictionary = plans[root]
+		if not root.is_empty(): path = path.substr(root.length() + 1)
 		if _junk_path(path): continue
 		if not _safe_relative_path(path):
 			return {"error": "The archive contains an unsafe path: %s" % path}
@@ -403,126 +537,168 @@ static func _validate_and_extract_zip(
 		# anything the game can't use (a creator's source .mp4, a .psd, an .exe)
 		# is left in the archive and never written to disk, instead of refusing
 		# a pack that is fine without it.
-		if not SAFE_EXTENSIONS.has(ext):
+		if not SAFE_EXTENSIONS.has(ext) and not (plan["type"] == "studio" and STUDIO_EXTENSIONS.has(ext)):
 			print("Community pack install: skipped %s, the game doesn't use .%s files" % [path, ext])
 			continue
 		var key: String = path.to_lower()
-		if seen.has(key): return {"error": "The archive writes the same path twice: %s" % path}
-		seen[key] = true
+		if plan["seen"].has(key): return {"error": "The archive writes the same path twice: %s" % path}
+		plan["seen"][key] = true
 		var size: int = int(entry["size"])
 		if size > MAX_FILE_BYTES:
 			return {"error": "%s is larger than the per-file safety limit." % path}
 		total += size
 		if total > MAX_EXPANDED_BYTES:
 			return {"error": "The extracted pack would exceed the 4 GB safety limit."}
-		if AUDIO_EXTENSIONS.has(ext): audio_count += 1
-		if ext == "ogv": video_count += 1
+		if AUDIO_EXTENSIONS.has(ext): plan["audio"] += 1
+		if ext == "ogv": plan["video"] += 1
+		plan["bytes"] += size
 		var selected: Dictionary = entry.duplicate()
 		selected["output_path"] = path
-		chosen.append(selected)
-	if chosen.is_empty() or audio_count == 0 or video_count == 0:
-		return {"error": "The archive did not contain a complete dub pack."}
+		plan["files"].append(selected)
 
-	var voice_root: String = (
-		str(FileManager.MODPACKS_VOICE) if voice_root_override.is_empty()
-		else voice_root_override).trim_suffix("/")
-	if DirAccess.make_dir_recursive_absolute(voice_root) != OK:
-		return {"error": "Could not create the game's packs_voice folder."}
-	var root_dir: DirAccess = DirAccess.open(voice_root)
-	if root_dir != null:
-		var free: int = root_dir.get_space_left()
+	var ready: Array[String] = []
+	var dub_problem: bool = false
+	for root: String in plans:
+		var plan: Dictionary = plans[root]
+		var complete: bool = not plan["files"].is_empty()
+		match str(plan["type"]):
+			"dub":
+				complete = complete and plan["audio"] > 0 and plan["video"] > 0
+				dub_problem = dub_problem or not complete
+			"voice", "chatter": complete = complete and plan["audio"] > 0
+		if complete: ready.append(root)
+	if ready.is_empty():
+		if dub_problem: return {"error": "The archive did not contain a complete dub pack."}
+		return {"error": "No pack the game can use was found in this archive."}
+	ready.sort()
+
+	var roots: Dictionary = _roots_from(roots_value)
+	var reserved: Dictionary = {}
+	for root: String in ready:
+		var plan: Dictionary = plans[root]
+		var type_root: String = str(roots[plan["type"]])
+		if DirAccess.make_dir_recursive_absolute(type_root) != OK:
+			return {"error": "Could not create the game's %s folder." % type_root.get_file()}
+		# Dub packs keep their GameBanana name and tag. Everything else keeps the
+		# creator's folder name, which is the name Customize shows.
+		var mod_name: String = str(mod.get("name", "Pack"))
+		var folder_name: String
+		if plan["type"] == "dub":
+			folder_name = _safe_folder_name(mod_name if ready.size() == 1 else root.get_file(), mod_id)
+		else:
+			folder_name = _clean_folder_name(root.get_file() if not root.is_empty() else mod_name, mod_name)
+		var destination: String = type_root.path_join(folder_name)
+		var suffix: int = 2
+		while DirAccess.dir_exists_absolute(destination) or reserved.has(destination.to_lower()):
+			destination = type_root.path_join("%s (%d)" % [folder_name, suffix])
+			suffix += 1
+		reserved[destination.to_lower()] = true
+		plan["destination"] = destination
+		plan["staging_root"] = type_root.path_join(".tcv-community-staging")
+	var first_root: DirAccess = DirAccess.open(str(plans[ready[0]]["destination"]).get_base_dir())
+	if first_root != null:
+		var free: int = first_root.get_space_left()
 		if free > 0 and free < total + FREE_SPACE_MARGIN:
 			return {"error": "Not enough disk space to install this pack."}
-	# Stage beside the final pack. user:// may be on C: while the game and its
+
+	# Stage beside each final pack. user:// may be on C: while the game and its
 	# external packs live on another drive; a rename across those volumes is not
 	# atomic and normally fails outright on Windows.
-	var staging_root: String = voice_root.path_join(".tcv-community-staging")
-	if DirAccess.make_dir_recursive_absolute(staging_root) != OK:
-		return {"error": "Could not create the community-pack staging folder."}
-
-	var folder_name: String = _safe_folder_name(str(mod.get("name", "Dub pack")), int(mod.get("id", 0)))
-	var destination: String = voice_root.path_join(folder_name)
-	var registry: Dictionary = load_registry() if use_registry else {}
-	var registered: Dictionary = _as_dictionary(registry.get(str(mod.get("id", 0)), {}))
-	var registered_path: String = str(registered.get("path", ""))
-	if not registered_path.is_empty() and DirAccess.dir_exists_absolute(registered_path):
-		return {"path": registered_path, "already_installed": true}
-	var suffix: int = 2
-	while DirAccess.dir_exists_absolute(destination):
-		destination = voice_root.path_join("%s (%d)" % [folder_name, suffix])
-		suffix += 1
-
-	var staging: String = staging_root.path_join(
-		"%d-%d" % [int(mod.get("id", 0)), Time.get_ticks_usec()])
-	if DirAccess.make_dir_recursive_absolute(staging) != OK:
-		return {"error": "Could not create a temporary installation folder."}
 	var zip: = ZIPReader.new()
 	var open_error: Error = zip.open(archive)
 	if open_error != OK:
-		_remove_tree(staging, staging_root)
 		return {"error": "Godot could not open this ZIP (%s)." % error_string(open_error)}
-	for entry: Dictionary in chosen:
-		var output_path: String = staging.path_join(str(entry["output_path"]))
-		if DirAccess.make_dir_recursive_absolute(output_path.get_base_dir()) != OK:
-			zip.close()
-			_remove_tree(staging, staging_root)
-			return {"error": "Could not create a folder while extracting the pack."}
-		var bytes: PackedByteArray = zip.read_file(str(entry["zip_path"]))
-		if bytes.size() != int(entry["size"]):
-			zip.close()
-			_remove_tree(staging, staging_root)
-			return {"error": "The ZIP entry %s did not extract to its declared size." % str(entry["output_path"])}
-		var output: FileAccess = FileAccess.open(output_path, FileAccess.WRITE)
-		if output == null:
-			zip.close()
-			_remove_tree(staging, staging_root)
-			return {"error": "Could not write %s." % str(entry["output_path"])}
-		output.store_buffer(bytes)
-		output.close()
+	var problem: String = ""
+	for index: int in ready.size():
+		problem = _stage_pack(zip, plans[ready[index]], mod, file, index)
+		if not problem.is_empty(): break
 	zip.close()
+	var moved: Array[String] = []
+	if problem.is_empty():
+		for root: String in ready:
+			var plan: Dictionary = plans[root]
+			var move_error: Error = DirAccess.rename_absolute(plan["staging"], plan["destination"])
+			if move_error != OK:
+				problem = "Could not move the verified pack into %s (%s)." % [
+					str(plan["destination"]).get_base_dir().get_file(), error_string(move_error)]
+				break
+			moved.append(plan["destination"])
+	for root: String in ready:
+		var plan: Dictionary = plans[root]
+		if not problem.is_empty() and plan.has("staging"): _remove_tree(plan["staging"], plan["staging_root"])
+		# only removes it when empty: another install may be staging there right now
+		DirAccess.remove_absolute(plan["staging_root"])
+	if not problem.is_empty():  # all or nothing
+		for path: String in moved: _remove_installed_tree(path, path)
+		return {"error": problem}
 
-	var manifest: Dictionary = {
-		"schema": 1,
-		"provider": "gamebanana",
-		"mod_id": int(mod.get("id", 0)),
-		"file_id": int(file.get("id", 0)),
-		"name": str(mod.get("name", "Dub pack")),
-		"author": str(mod.get("author", "Unknown creator")),
-		"profile_url": str(mod.get("profile_url", "")),
-		"archive_name": str(file.get("name", "")),
-		"archive_md5": str(file.get("md5", "")),
-		"installed_files": chosen.size(),
-		"installed_bytes": total,
-		"installed_unix": int(Time.get_unix_time_from_system()),
-	}
-	var manifest_file: FileAccess = FileAccess.open(staging.path_join(MANIFEST_NAME), FileAccess.WRITE)
-	if manifest_file == null:
-		_remove_tree(staging, staging_root)
-		return {"error": "Could not write the installed-pack manifest."}
-	manifest_file.store_string(JSON.stringify(manifest, "  "))
-	manifest_file.close()
-
-	var move_error: Error = DirAccess.rename_absolute(staging, destination)
-	if move_error != OK:
-		_remove_tree(staging, staging_root)
-		return {"error": "Could not move the verified pack into packs_voice (%s)." % error_string(move_error)}
-	if not use_registry:
-		return {"path": destination, "files": chosen.size(), "bytes": total}
+	var installed: Array[Dictionary] = []
+	var file_count: int = 0
+	for root: String in ready:
+		installed.append({"type": plans[root]["type"], "path": plans[root]["destination"]})
+		file_count += plans[root]["files"].size()
+	var result: Dictionary = {
+		"path": moved[0], "paths": moved, "packs": installed, "files": file_count, "bytes": total}
+	if not use_registry: return result
 	_registry_lock.lock()
 	registry = load_registry()  # fresh: another install may have finished meanwhile
-	registry[str(mod.get("id", 0))] = {
-		"path": destination,
+	registry[str(mod_id)] = {
+		"path": moved[0],
+		"paths": moved,
 		"file_id": int(file.get("id", 0)),
 		"md5": str(file.get("md5", "")),
-		"name": str(mod.get("name", "Dub pack")),
+		"name": str(mod.get("name", "Pack")),
 	}
 	var saved: bool = save_registry(registry)
 	_registry_lock.unlock()
 	if not saved:
-		# Installation is still complete; the embedded manifest lets a later run
+		# Installation is still complete; the embedded manifests let a later run
 		# rediscover it even if this convenience index could not be written.
-		return {"path": destination, "warning": "Installed, but could not update the local pack index."}
-	return {"path": destination, "files": chosen.size(), "bytes": total}
+		result["warning"] = "Installed, but could not update the local pack index."
+	return result
+
+
+# Extracts one pack into its own staging folder. Returns an error message, or "".
+static func _stage_pack(zip: ZIPReader, plan: Dictionary, mod: Dictionary, file: Dictionary, index: int) -> String:
+	var staging_root: String = plan["staging_root"]
+	if DirAccess.make_dir_recursive_absolute(staging_root) != OK:
+		return "Could not create the community-pack staging folder."
+	var staging: String = staging_root.path_join(
+		"%d-%d-%d" % [int(mod.get("id", 0)), Time.get_ticks_usec(), index])
+	if DirAccess.make_dir_recursive_absolute(staging) != OK:
+		return "Could not create a temporary installation folder."
+	plan["staging"] = staging
+	for entry: Dictionary in plan["files"]:
+		var output_path: String = staging.path_join(str(entry["output_path"]))
+		if DirAccess.make_dir_recursive_absolute(output_path.get_base_dir()) != OK:
+			return "Could not create a folder while extracting the pack."
+		var bytes: PackedByteArray = zip.read_file(str(entry["zip_path"]))
+		if bytes.size() != int(entry["size"]):
+			return "The ZIP entry %s did not extract to its declared size." % str(entry["output_path"])
+		var output: FileAccess = FileAccess.open(output_path, FileAccess.WRITE)
+		if output == null: return "Could not write %s." % str(entry["output_path"])
+		output.store_buffer(bytes)
+		output.close()
+	var manifest: Dictionary = {
+		"schema": 1,
+		"provider": "gamebanana",
+		"type": str(plan["type"]),
+		"mod_id": int(mod.get("id", 0)),
+		"file_id": int(file.get("id", 0)),
+		"name": str(mod.get("name", "Pack")),
+		"author": str(mod.get("author", "Unknown creator")),
+		"profile_url": str(mod.get("profile_url", "")),
+		"archive_name": str(file.get("name", "")),
+		"archive_md5": str(file.get("md5", "")),
+		"installed_files": plan["files"].size(),
+		"installed_bytes": int(plan["bytes"]),
+		"installed_unix": int(Time.get_unix_time_from_system()),
+	}
+	var manifest_file: FileAccess = FileAccess.open(staging.path_join(MANIFEST_NAME), FileAccess.WRITE)
+	if manifest_file == null: return "Could not write the installed-pack manifest."
+	manifest_file.store_string(JSON.stringify(manifest, "  "))
+	manifest_file.close()
+	return ""
 
 
 static func inspect_zip(path: String) -> Dictionary:
@@ -634,81 +810,108 @@ static func _find_dub_root(entries: Array[Dictionary]) -> String:
 
 
 static func installed_path(mod_id: int) -> String:
-	if mod_id <= 0: return ""
+	var paths: PackedStringArray = installed_paths(mod_id)
+	return paths[0] if not paths.is_empty() else ""
+
+
+static func installed_paths(mod_id: int) -> PackedStringArray:
+	var found: PackedStringArray = []
+	if mod_id <= 0: return found
 	var registry: Dictionary = load_registry()
 	var record: Dictionary = _as_dictionary(registry.get(str(mod_id), {}))
-	var path: String = str(record.get("path", ""))
-	if not path.is_empty() and DirAccess.dir_exists_absolute(path): return path
-	# The per-pack manifest is authoritative. Rebuild the convenience index if
-	# it was deleted or an installed folder was moved within packs_voice.
-	var voice_root: String = str(FileManager.MODPACKS_VOICE).trim_suffix("/")
-	if not DirAccess.dir_exists_absolute(voice_root): return ""
-	for folder: String in DirAccess.get_directories_at(voice_root):
-		var candidate: String = voice_root.path_join(folder)
-		var manifest_path: String = candidate.path_join(MANIFEST_NAME)
-		if not FileAccess.file_exists(manifest_path): continue
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
-		if not parsed is Dictionary or int(parsed.get("mod_id", 0)) != mod_id: continue
-		_registry_lock.lock()
-		registry = load_registry()
-		registry[str(mod_id)] = {
-			"path": candidate,
-			"file_id": int(parsed.get("file_id", 0)),
-			"md5": str(parsed.get("archive_md5", "")),
-			"name": str(parsed.get("name", folder)),
-		}
-		save_registry(registry)
-		_registry_lock.unlock()
-		return candidate
-	return ""
+	var listed: Array = record.get("paths", [record.get("path", "")]) if not record.is_empty() else []
+	for value: Variant in listed:
+		if not str(value).is_empty() and DirAccess.dir_exists_absolute(str(value)): found.append(str(value))
+	if not found.is_empty(): return found
+	# The per-pack manifests are authoritative. Rebuild the convenience index if
+	# it was deleted or an installed folder was moved within its packs folder.
+	var first: Dictionary = {}
+	for pack: Dictionary in installed_packs():
+		if int(pack.get("mod_id", 0)) != mod_id: continue
+		found.append(str(pack["path"]))
+		if first.is_empty(): first = pack
+	if found.is_empty(): return found
+	_registry_lock.lock()
+	registry = load_registry()
+	registry[str(mod_id)] = {
+		"path": found[0],
+		"paths": Array(found),
+		"file_id": int(first.get("file_id", 0)),
+		"md5": str(first.get("archive_md5", "")),
+		"name": str(first.get("name", found[0].get_file())),
+	}
+	save_registry(registry)
+	_registry_lock.unlock()
+	return found
 
 
-static func installed_packs(voice_root_override: String = "") -> Array[Dictionary]:
-	var voice_root: String = (
-		str(FileManager.MODPACKS_VOICE) if voice_root_override.is_empty()
-		else voice_root_override).replace("\\", "/").trim_suffix("/")
+# One record per installed pack folder, of every type. Packs installed before
+# types existed have no "type" and are Dub Mode packs.
+static func installed_packs(roots_override: Variant = "") -> Array[Dictionary]:
+	var roots: Dictionary = _roots_from(roots_override)
 	var packs: Array[Dictionary] = []
-	var parent: DirAccess = DirAccess.open(voice_root)
-	if parent == null: return packs
-	parent.include_hidden = true
-	for folder: String in parent.get_directories():
-		if parent.is_link(folder): continue
-		var path: String = voice_root.path_join(folder)
-		var manifest_path: String = path.path_join(MANIFEST_NAME)
-		if not FileAccess.file_exists(manifest_path): continue
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
-		if (not parsed is Dictionary or str(parsed.get("provider", "")) != "gamebanana"
-			or int(parsed.get("mod_id", 0)) <= 0):
-			continue
-		var record: Dictionary = parsed.duplicate(true)
-		record["path"] = path
-		record["folder"] = folder
-		packs.append(record)
+	var scanned: Dictionary = {}
+	for type: String in roots:
+		var type_root: String = str(roots[type])
+		if scanned.has(type_root): continue
+		scanned[type_root] = true
+		var parent: DirAccess = DirAccess.open(type_root)
+		if parent == null: continue
+		parent.include_hidden = true
+		for folder: String in parent.get_directories():
+			if parent.is_link(folder): continue
+			var path: String = type_root.path_join(folder)
+			var manifest_path: String = path.path_join(MANIFEST_NAME)
+			if not FileAccess.file_exists(manifest_path): continue
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
+			if (not parsed is Dictionary or str(parsed.get("provider", "")) != "gamebanana"
+				or int(parsed.get("mod_id", 0)) <= 0):
+				continue
+			var record: Dictionary = parsed.duplicate(true)
+			record["path"] = path
+			record["folder"] = folder
+			record["root"] = type_root
+			if not TYPE_FOLDERS.has(str(record.get("type", ""))): record["type"] = "dub"
+			packs.append(record)
 	packs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0)
 	return packs
 
 
+# Removes every folder this installer placed for the submission.
 static func uninstall(mod_id: int, exact_path: String = "") -> Dictionary:
-	var path: String = (
-		exact_path if not exact_path.is_empty()
-		else installed_path(mod_id)).replace("\\", "/").trim_suffix("/")
-	if path.is_empty(): return {"error": "This community pack is not installed."}
-	var voice_root: String = str(FileManager.MODPACKS_VOICE).replace("\\", "/").trim_suffix("/")
-	return _uninstall_path(mod_id, path, voice_root, true)
+	var roots: Array = type_roots().values()
+	var paths: PackedStringArray = []
+	for pack: Dictionary in installed_packs():
+		if int(pack.get("mod_id", 0)) == mod_id: paths.append(str(pack["path"]))
+	var exact: String = exact_path.replace("\\", "/").trim_suffix("/")
+	if not exact.is_empty() and not paths.has(exact): paths.append(exact)
+	if paths.is_empty(): return {"error": "This community pack is not installed."}
+	for path: String in paths:
+		if not roots.has(path.get_base_dir()):
+			return {"error": "The installed pack is outside the game's pack folders and was not removed."}
+	for path: String in paths:
+		var removed: Dictionary = _uninstall_path(mod_id, path, path.get_base_dir(), false)
+		if removed.has("error"): return removed
+	_registry_lock.lock()
+	var registry: Dictionary = load_registry()
+	registry.erase(str(mod_id))
+	save_registry(registry)
+	_registry_lock.unlock()
+	return {"path": paths[0], "paths": paths}
 
 
 static func _uninstall_path(
-	mod_id: int, installed: String, voice_root_value: String, update_registry: bool
+	mod_id: int, installed: String, type_root_value: String, update_registry: bool
 ) -> Dictionary:
 	var path: String = installed.replace("\\", "/").trim_suffix("/")
-	var voice_root: String = voice_root_value.replace("\\", "/").trim_suffix("/")
+	var type_root: String = type_root_value.replace("\\", "/").trim_suffix("/")
 	# Only a direct child created by this installer can be removed. Never turn a
 	# registry entry or edited manifest into a recursive delete outside the pack
 	# library.
-	if path.get_base_dir() != voice_root:
-		return {"error": "The installed pack is outside packs_voice and was not removed."}
-	var parent: DirAccess = DirAccess.open(voice_root)
+	if path.get_base_dir() != type_root:
+		return {"error": "The installed pack is outside the game's pack folders and was not removed."}
+	var parent: DirAccess = DirAccess.open(type_root)
 	if parent == null or parent.is_link(path.get_file()):
 		return {"error": "The installed pack folder is not safe to remove automatically."}
 	var manifest_path: String = path.path_join(MANIFEST_NAME)
@@ -770,17 +973,26 @@ static func _junk_path(path: String) -> bool:
 		or lower.ends_with("/desktop.ini") or lower == "desktop.ini")
 
 
-static func _safe_folder_name(value: String, mod_id: int) -> String:
+# keeps a creator's folder name as written ("TvTime(Music & 2D sprites)",
+# "Versão Brasileira"), dropping only what Windows or macOS can't store.
+static func _clean_folder_name(value: String, fallback: String = "Pack") -> String:
 	var out: String = ""
 	for i: int in value.length():
 		var c: String = value.substr(i, 1)
-		if ("abcdefghijklmnopqrstuvwxyz0123456789".contains(c.to_lower())
-			or " -_().[]".contains(c)):
-			out += c
-		elif not out.ends_with(" "): out += " "
-	out = out.strip_edges().substr(0, 80).strip_edges()
-	if out.is_empty(): out = "Dub pack"
-	return "%s [GB-%d]" % [out, mod_id]
+		if c.unicode_at(0) < 32 or "<>:\"/\\|?*".contains(c): c = " "
+		if c == " " and (out.is_empty() or out.ends_with(" ")): continue
+		out += c
+	out = out.substr(0, 80).strip_edges().rstrip(". ")
+	if out.to_upper().get_basename() in ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4",
+		"COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6",
+		"LPT7", "LPT8", "LPT9"]:
+		out += " pack"
+	if out.is_empty() and fallback != value: return _clean_folder_name(fallback, "Pack")
+	return out if not out.is_empty() else "Pack"
+
+
+static func _safe_folder_name(value: String, mod_id: int) -> String:
+	return "%s [GB-%d]" % [_clean_folder_name(value, "Dub pack"), mod_id]
 
 
 static func _remove_tree(path: String, staging_root: String) -> void:

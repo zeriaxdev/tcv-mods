@@ -9,6 +9,19 @@ signal request_failed(message: String)
 
 const GAME_ID: int = 20674
 const DUB_CATEGORY_ID: int = 44064
+# GameBanana's categories for the game, checked 2026-11-16. id 0 is every type.
+# The installer reads the archive to decide where each pack goes, so this only
+# narrows the list.
+const CATEGORIES: Array[Dictionary] = [
+	{"id": 0, "name": "", "label": "All pack types"},
+	{"id": DUB_CATEGORY_ID, "name": "Dub Mode", "label": "Dub Mode"},
+	{"id": 31833, "name": "Compilation Packs", "label": "Compilations"},
+	{"id": 32135, "name": "Players", "label": "Players"},
+	{"id": 32053, "name": "Menus", "label": "Menus"},
+	{"id": 32055, "name": "Hosts", "label": "Hosts"},
+	{"id": 32054, "name": "Judges", "label": "Judges"},
+	{"id": 31828, "name": "Other/Misc", "label": "Other"},
+]
 const PAGE_SIZE: int = 18
 const API_BODY_LIMIT: int = 8 * 1024 * 1024
 
@@ -20,6 +33,7 @@ const SEARCH_FIELDS: String = "name,description,owner,credits"
 var _http: HTTPRequest
 var _request_kind: String = ""
 var _request_page: int = 1
+var _request_category: String = ""
 var _request_serial: int = 0
 
 
@@ -36,24 +50,38 @@ func cancel() -> void:
 	_request_kind = ""
 
 
-func fetch_page(page: int, sort: String = "Generic_Newest", force: bool = false) -> void:
+func fetch_page(page: int, sort: String = "Generic_Newest", force: bool = false, category_id: int = DUB_CATEGORY_ID) -> void:
 	if is_busy(): return
 	_request_kind = "page"
 	_request_page = maxi(1, page)
-	var url: String = (INDEX_URL
+	_start(build_page_url(_request_page, sort, category_id), force)
+
+
+static func build_page_url(page: int, sort: String, category_id: int) -> String:
+	var filter: String = ("&_aFilters%%5BGeneric_Category%%5D=%d" % category_id if category_id > 0
+		else "&_aFilters%%5BGeneric_Game%%5D=%d" % GAME_ID)
+	return (INDEX_URL
 		+ "?_nPerpage=%d" % PAGE_SIZE
-		+ "&_aFilters%%5BGeneric_Category%%5D=%d" % DUB_CATEGORY_ID
-		+ "&_nPage=%d" % _request_page
+		+ filter
+		+ "&_nPage=%d" % maxi(1, page)
 		+ "&_sSort=%s" % sort.uri_encode())
-	_start(url, force)
 
 
-func search(query: String, page: int, sort: String = "best_match", force: bool = false) -> void:
+static func category_name(category_id: int) -> String:
+	for category: Dictionary in CATEGORIES:
+		if int(category["id"]) == category_id: return str(category["name"])
+	return ""
+
+
+# Searches cover the whole game; results outside the chosen category are dropped
+# here, since GameBanana's search can't filter by category.
+func search(query: String, page: int, sort: String = "best_match", force: bool = false, category_id: int = DUB_CATEGORY_ID) -> void:
 	if is_busy(): return
 	var clean: String = query.strip_edges()
 	if clean.is_empty():
-		fetch_page(page, "Generic_Newest", force)
+		fetch_page(page, "Generic_Newest", force, category_id)
 		return
+	_request_category = category_name(category_id)
 	if clean.length() < 2:
 		request_failed.emit("Search for at least 2 characters.")
 		return
@@ -124,7 +152,7 @@ func _on_request_completed(
 		if detail.has("error"): request_failed.emit(str(detail["error"]))
 		else: detail_loaded.emit(detail)
 	else:
-		var page: Dictionary = parse_page_json(text, _request_page, kind == "search")
+		var page: Dictionary = parse_page_json(text, _request_page, _request_category if kind == "search" else "")
 		if page.has("error"): request_failed.emit(str(page["error"]))
 		else: page_loaded.emit(page)
 
@@ -143,7 +171,7 @@ static func _http_error_message(response_code: int, text: String) -> String:
 	return "GameBanana returned HTTP %d." % response_code
 
 
-static func parse_page_json(text: String, page: int = 1, dub_only: bool = false) -> Dictionary:
+static func parse_page_json(text: String, page: int = 1, only_category: String = "") -> Dictionary:
 	var parsed: Variant = JSON.parse_string(text)
 	if not parsed is Dictionary: return {"error": "GameBanana returned malformed catalog data."}
 	var root: Dictionary = parsed
@@ -155,7 +183,7 @@ static func parse_page_json(text: String, page: int = 1, dub_only: bool = false)
 		if not value is Dictionary: continue
 		var record: Dictionary = _normalize_record(value)
 		if record.is_empty(): continue
-		if dub_only and str(record.get("category", "")).to_lower() != "dub mode": continue
+		if not only_category.is_empty() and str(record.get("category", "")).to_lower() != only_category.to_lower(): continue
 		records.append(record)
 	return {
 		"page": maxi(1, page),

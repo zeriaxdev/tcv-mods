@@ -60,9 +60,14 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 			{"_idRow": 11, "_sName": "Wrong category", "_aRootCategory": {"_sName": "Audio"}},
 		],
 	})
-	var page: Dictionary = client.parse_page_json(catalog_json, 3, true)
+	var page: Dictionary = client.parse_page_json(catalog_json, 3, "Dub Mode")
 	if int(page.get("page", 0)) != 3 or Array(page.get("records", [])).size() != 1:
 		failures.append("GameBanana catalog normalization/category filtering")
+	if Array(client.parse_page_json(catalog_json, 1, "").get("records", [])).size() != 2:
+		failures.append("All pack types should keep every category")
+	if (not client.build_page_url(1, "Generic_Newest", 0).contains("Generic_Game%5D=20674")
+		or not client.build_page_url(1, "Generic_Newest", 32135).contains("Generic_Category%5D=32135")):
+		failures.append("GameBanana category filter URL")
 	var search_url: String = client.build_search_url("movie night", 2)
 	if (search_url.contains("%%")
 		or not search_url.contains("_sSearchString=movie%20night")
@@ -109,6 +114,11 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 	if compact.length() > 40 or not compact.ends_with(".rar") or not compact.contains("…"):
 		failures.append("community browser long-name compaction")
 
+	for pair: Array in [["TvTime(Music & 2D sprites)", "TvTime(Music & 2D sprites)"],
+			["Versão Brasileira", "Versão Brasileira"], ["a/b:c?", "a b c"], ["..", "Selftest"],
+			["con", "con pack"], ["Flowery Player! ", "Flowery Player!"]]:
+		if installer._clean_folder_name(pair[0], "Selftest") != pair[1]:
+			failures.append("folder name %s became %s" % [pair[0], installer._clean_folder_name(pair[0], "Selftest")])
 	for unsafe: String in ["../outside.wav", "/absolute.wav", "C:/drive.wav", "ok/../outside.wav"]:
 		if installer._safe_relative_path(unsafe):
 			failures.append("unsafe archive path accepted: %s" % unsafe)
@@ -147,18 +157,18 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 				failures.append("validated ZIP extraction: %s" % str(result["error"]))
 			else:
 				var installed: String = str(result.get("path", ""))
-				if not FileAccess.file_exists(installed.path_join("dub_video.ogv")):
+				if (installed.get_base_dir() != test_root.path_join("packs_voice")
+					or not FileAccess.file_exists(installed.path_join("dub_video.ogv"))):
 					failures.append("validated ZIP was not moved into packs_voice")
 				if (FileAccess.file_exists(installed.path_join("original video.mp4"))
 					or FileAccess.file_exists(installed.path_join("run me.exe"))):
 					failures.append("file types the game doesn't use were written to disk")
-				_remove_test_tree(installed, test_root)
-			_remove_test_tree(test_root.path_join(".tcv-community-staging"), test_root)
-			DirAccess.remove_absolute(test_root)
+			_remove_test_root(test_root)
 	else:
 		failures.append("could not create ZIP self-test fixture")
 	if FileAccess.file_exists(zip_path): DirAccess.remove_absolute(zip_path)
 	_test_flat_pack_archive(installer, failures)
+	_test_pack_types(installer, failures)
 
 	if failures.is_empty(): print("SELFTEST PASS | community catalog and ZIP safety checks")
 
@@ -194,23 +204,127 @@ func _test_flat_pack_archive(installer: Script, failures: Array[String]) -> void
 			failures.append("flat ZIP installation: %s" % str(result["error"]))
 		else:
 			var installed: String = str(result.get("path", ""))
-			if (installed == test_root or installed.get_base_dir() != test_root
+			var voice_root: String = test_root.path_join("packs_voice")
+			if (installed.get_base_dir() != voice_root
 				or not FileAccess.file_exists(installed.path_join("dub_video.ogv"))
-				or FileAccess.file_exists(test_root.path_join("dub_video.ogv"))):
+				or FileAccess.file_exists(voice_root.path_join("dub_video.ogv"))):
 				failures.append("flat ZIP files were not contained in their own pack folder")
 			var listed: Array[Dictionary] = installer.installed_packs(test_root)
 			if (listed.size() != 1 or str(listed[0].get("path", "")) != installed
 				or int(listed[0].get("mod_id", 0)) != 2147483645
 				or int(listed[0].get("installed_files", 0)) != 3
-				or int(listed[0].get("installed_bytes", 0)) != 9):
+				or int(listed[0].get("installed_bytes", 0)) != 9
+				or str(listed[0].get("type", "")) != "dub"):
 				failures.append("installed community-pack library scan")
 			var removed: Dictionary = installer._uninstall_path(
-				2147483645, installed, test_root, false)
+				2147483645, installed, voice_root, false)
 			if removed.has("error") or DirAccess.dir_exists_absolute(installed):
 				failures.append("guarded community-pack uninstall: %s" % str(removed))
-	_remove_test_tree(test_root.path_join(".tcv-community-staging"), test_root)
-	DirAccess.remove_absolute(test_root)
+	_remove_test_root(test_root)
 	if FileAccess.file_exists(zip_path): DirAccess.remove_absolute(zip_path)
+
+
+# Every Customize type, laid out the ways real GameBanana archives are.
+func _test_pack_types(installer: Script, failures: Array[String]) -> void:
+	var cases: Array[Dictionary] = [
+		{"what": "menu pack", "files": ["Frutiger/config_menu.json", "Frutiger/background.png",
+			"Frutiger/music_menu.ogg", "Frutiger/video.ogv", "Frutiger/model.glb", "note.txt"],
+			"want": {"packs_menu/Frutiger": ["config_menu.json", "background.png", "music_menu.ogg", "video.ogv"]},
+			"absent": ["packs_menu/Frutiger/model.glb", "packs_menu/note.txt"]},
+		{"what": "two players in one archive", "files": ["(SM) Mario/config_player.json",
+			"(SM) Mario/player.png", "(SM) Mario/jump.wav", "(SM) Luigi/config_player.json"],
+			"want": {"packs_player/(SM) Mario": ["config_player.json", "player.png", "jump.wav"],
+				"packs_player/(SM) Luigi": ["config_player.json"]}},
+		{"what": "host two folders down", "files": ["CAVEMAN MOD/Caveman/config_host.json",
+			"CAVEMAN MOD/Caveman/host.png"],
+			"want": {"packs_host/Caveman": ["config_host.json", "host.png"]}},
+		{"what": "judges at the archive top", "files": ["config_judges.json", "judge1.png", "scoreblip1.mp3"],
+			"want": {"packs_judges/Type selftest": ["config_judges.json", "judge1.png", "scoreblip1.mp3"]}},
+		{"what": "studio with its 3D model", "files": ["TV/config_studio.json", "TV/model.glb",
+			"TV/screen.ogv", "TV/music_studio.mp3"],
+			"want": {"packs_studio/TV": ["config_studio.json", "model.glb", "screen.ogv", "music_studio.mp3"]}},
+		{"what": "chatter pack", "files": ["Chat/config_chatter.ini", "Chat/hello.wav"],
+			"want": {"packs_chatter/Chat": ["config_chatter.ini", "hello.wav"]}},
+		{"what": "voice pack with sub-folders", "files": ["JJK/Gojo/a.mp3", "JJK/Gojo/a.png",
+			"JJK/Sukuna/b.mp3", "JJK/b.txt"],
+			"want": {"packs_voice/JJK": ["Gojo/a.mp3", "Gojo/a.png", "Sukuna/b.mp3", "b.txt"]}},
+		{"what": "compilation laid out like the game folder", "files": [
+			"packs_host/Tenna/config_host.json", "packs_voices/Family/clip.mp3",
+			"packs_player/Kris/config_player.json", "packs_voice/Movie/dub_video.ogv",
+			"packs_voice/Movie/line.wav", "packs_menu/TV Time/config_menu.json", "packs_menu/stray.png",
+			"packs_studio/TV/model.glb"],
+			"want": {"packs_host/Tenna": ["config_host.json"], "packs_voice/Family": ["clip.mp3"],
+				"packs_player/Kris": ["config_player.json"], "packs_voice/Movie [GB-{id}]": ["dub_video.ogv", "line.wav"],
+				"packs_menu/TV Time": ["config_menu.json"], "packs_studio/TV": ["model.glb"]},
+			"absent": ["packs_menu/stray.png"],
+			"types": {"packs_voice/Family": "voice", "packs_voice/Movie [GB-{id}]": "dub", "packs_studio/TV": "studio"}},
+		{"what": "code mod", "files": ["mod/net/lobby.gd", "README.md", "Install.bat"],
+			"error": "No pack the game can use"},
+		{"what": "chatter pack without audio", "files": ["Chat/config_chatter.ini", "Chat/readme.txt"],
+			"error": "No pack the game can use"},
+	]
+	var zip_path: String = "user://community-pack-types-selftest.zip"
+	var test_root: String = "user://community-pack-types-selftest"
+	var mod_id: int = 2147483600
+	for case: Dictionary in cases:
+		mod_id += 1
+		_remove_test_root(test_root)
+		if FileAccess.file_exists(zip_path): DirAccess.remove_absolute(zip_path)
+		var packer: = ZIPPacker.new()
+		if packer.open(zip_path) != OK:
+			failures.append("could not create the %s fixture" % case["what"])
+			continue
+		for path: String in case["files"]:
+			packer.start_file(path)
+			packer.write_file(PackedByteArray([7, 8, 9]))
+			packer.close_file()
+		packer.close()
+		var result: Dictionary = installer._validate_and_extract(zip_path,
+			{"id": mod_id, "name": "Type selftest", "author": "Selftest"},
+			{"id": 1, "name": "types.zip", "md5": FileAccess.get_md5(zip_path)}, test_root, false)
+		if case.has("error"):
+			if not str(result.get("error", "")).contains(str(case["error"])):
+				failures.append("%s: wanted an error, got %s" % [case["what"], str(result)])
+			continue
+		if result.has("error"):
+			failures.append("%s: %s" % [case["what"], str(result["error"])])
+			continue
+		var want: Dictionary = {}  # dub packs carry their GameBanana id
+		for folder: String in case["want"]: want[folder.replace("{id}", str(mod_id))] = case["want"][folder]
+		if Array(result.get("paths", [])).size() != want.size():
+			failures.append("%s: installed %s" % [case["what"], str(result.get("paths", []))])
+		for folder: String in want:
+			for name: String in want[folder]:
+				if not FileAccess.file_exists(test_root.path_join(folder).path_join(name)):
+					failures.append("%s: %s/%s is missing" % [case["what"], folder, name])
+		for path: String in case.get("absent", []):
+			if FileAccess.file_exists(test_root.path_join(path)):
+				failures.append("%s: %s should not be installed" % [case["what"], path])
+		var listed: Array[Dictionary] = installer.installed_packs(test_root)
+		if listed.size() != want.size():
+			failures.append("%s: Installed packs lists %d folders" % [case["what"], listed.size()])
+		var types: Dictionary = {}
+		for folder: String in case.get("types", {}): types[folder.replace("{id}", str(mod_id))] = case["types"][folder]
+		for pack: Dictionary in listed:
+			var key: String = "%s/%s" % [str(pack.get("root", "")).get_file(), pack.get("folder", "")]
+			if types.has(key) and str(pack.get("type", "")) != types[key]:
+				failures.append("%s: %s is a %s, wanted %s" % [case["what"], key, pack.get("type", ""), types[key]])
+			var removed: Dictionary = installer._uninstall_path(mod_id, str(pack["path"]), str(pack["root"]), false)
+			if removed.has("error"): failures.append("%s: uninstall %s" % [case["what"], str(removed)])
+		if not installer.installed_packs(test_root).is_empty():
+			failures.append("%s: uninstall left folders behind" % case["what"])
+	_remove_test_root(test_root)
+	if FileAccess.file_exists(zip_path): DirAccess.remove_absolute(zip_path)
+
+
+# a stand-in game folder: its packs_* folders, their staging folders, then itself.
+func _remove_test_root(test_root: String) -> void:
+	if not DirAccess.dir_exists_absolute(test_root): return
+	var dir: DirAccess = DirAccess.open(test_root)
+	dir.include_hidden = true
+	for child: String in dir.get_directories(): _remove_test_tree(test_root.path_join(child), test_root)
+	for child: String in dir.get_files(): DirAccess.remove_absolute(test_root.path_join(child))
+	DirAccess.remove_absolute(test_root)
 
 
 func _remove_test_tree(path: String, allowed_root: String) -> void:
