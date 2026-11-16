@@ -169,8 +169,38 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 	if FileAccess.file_exists(zip_path): DirAccess.remove_absolute(zip_path)
 	_test_flat_pack_archive(installer, failures)
 	_test_pack_types(installer, failures)
+	_test_dub_without_video(installer, failures)
 
 	if failures.is_empty(): print("SELFTEST PASS | community catalog and ZIP safety checks")
+
+
+# a Dub Mode upload that lost its video must fail, not install as a voice pack.
+# Afterwards no install may still count as writing to disk.
+func _test_dub_without_video(installer: Script, failures: Array[String]) -> void:
+	var zip_path: String = "user://community-pack-novideo-selftest.zip"
+	var test_root: String = "user://community-pack-novideo-selftest-packs"
+	var packer: = ZIPPacker.new()
+	if packer.open(zip_path) != OK:
+		failures.append("could not create no-video ZIP fixture")
+		return
+	for path: String in ["pack/line.wav", "pack/line2.wav"]:
+		packer.start_file(path)
+		packer.write_file(PackedByteArray([7, 8, 9]))
+		packer.close_file()
+	packer.close()
+	var mod: Dictionary = {"id": 2147483640, "name": "No video", "author": "Selftest", "category": "Dub Mode"}
+	var file: Dictionary = {"id": 124, "name": "novideo.zip", "md5": FileAccess.get_md5(zip_path)}
+	var result: Dictionary = installer._validate_and_extract(zip_path, mod, file, test_root, false)
+	if str(result.get("error", "")) != "The archive did not contain a complete dub pack.":
+		failures.append("Dub Mode pack without video: %s" % str(result))
+	mod["category"] = "Other/Misc"
+	result = installer._validate_and_extract(zip_path, mod, file, test_root, false)
+	if result.has("error") or str(result["packs"][0]["type"]) != "voice":
+		failures.append("loose audio outside Dub Mode should stay a voice pack: %s" % str(result))
+	if installer._staging_bytes != 0:
+		failures.append("installs left %d bytes counted as in progress" % installer._staging_bytes)
+	_remove_test_root(test_root)
+	DirAccess.remove_absolute(zip_path)
 
 
 func _test_flat_pack_archive(installer: Script, failures: Array[String]) -> void:

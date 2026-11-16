@@ -509,6 +509,9 @@ static func _validate_and_extract_zip(
 	var found: Dictionary = find_packs(entries)
 	if found.is_empty():
 		return {"error": "No pack the game can use was found in this archive."}
+	# a Dub Mode upload without its video is a broken dub pack, not a voice pack
+	if str(mod.get("category", "")) == "Dub Mode" and not found.values().has("dub"):
+		return {"error": "The archive did not contain a complete dub pack."}
 
 	var mod_id: int = int(mod.get("id", 0))
 	var registry: Dictionary = load_registry() if use_registry else {}
@@ -596,10 +599,15 @@ static func _validate_and_extract_zip(
 		plan["destination"] = destination
 		plan["staging_root"] = type_root.path_join(".tcv-community-staging")
 	var first_root: DirAccess = DirAccess.open(str(plans[ready[0]]["destination"]).get_base_dir())
-	if first_root != null:
-		var free: int = first_root.get_space_left()
-		if free > 0 and free < total + FREE_SPACE_MARGIN:
-			return {"error": "Not enough disk space to install this pack."}
+	var free: int = first_root.get_space_left() if first_root != null else 0
+	# count the other installs still being written too, or three big packs that
+	# each fit alone can fill the disk together.
+	# ponytail: one total for every drive; per drive if packs ever span several
+	_registry_lock.lock()
+	var short: bool = free > 0 and free < total + _staging_bytes + FREE_SPACE_MARGIN
+	if not short: _staging_bytes += total
+	_registry_lock.unlock()
+	if short: return {"error": "Not enough disk space to install this pack."}
 
 	# Stage beside each final pack. user:// may be on C: while the game and its
 	# external packs live on another drive; a rename across those volumes is not
@@ -607,6 +615,7 @@ static func _validate_and_extract_zip(
 	var zip: = ZIPReader.new()
 	var open_error: Error = zip.open(archive)
 	if open_error != OK:
+		_release_staging(total)
 		return {"error": "Godot could not open this ZIP (%s)." % error_string(open_error)}
 	var problem: String = ""
 	for index: int in ready.size():
@@ -628,6 +637,7 @@ static func _validate_and_extract_zip(
 		if not problem.is_empty() and plan.has("staging"): _remove_tree(plan["staging"], plan["staging_root"])
 		# only removes it when empty: another install may be staging there right now
 		DirAccess.remove_absolute(plan["staging_root"])
+	_release_staging(total)  # written or removed by now, so free space counts it
 	if not problem.is_empty():  # all or nothing
 		for path: String in moved: _remove_installed_tree(path, path)
 		return {"error": problem}
@@ -642,9 +652,14 @@ static func _validate_and_extract_zip(
 	if not use_registry: return result
 	_registry_lock.lock()
 	registry = load_registry()  # fresh: another install may have finished meanwhile
+	# two files of the same mod installing at once both pass the check above; keep
+	# the other one's folders too, so Uninstall still finds them.
+	var paths: Array[String] = moved.duplicate()
+	for path: Variant in Array(_as_dictionary(registry.get(str(mod_id), {})).get("paths", [])):
+		if not paths.has(str(path)) and DirAccess.dir_exists_absolute(str(path)): paths.append(str(path))
 	registry[str(mod_id)] = {
 		"path": moved[0],
-		"paths": moved,
+		"paths": paths,
 		"file_id": int(file.get("id", 0)),
 		"md5": str(file.get("md5", "")),
 		"name": str(mod.get("name", "Pack")),
@@ -936,6 +951,13 @@ static func _uninstall_path(
 # reads this from the main thread. Godot's Mutex is recursive, so the
 # read-edit-save spots above hold it across both calls.
 static var _registry_lock: Mutex = Mutex.new()
+static var _staging_bytes: int = 0  # bytes other installs are writing right now
+
+
+static func _release_staging(bytes: int) -> void:
+	_registry_lock.lock()
+	_staging_bytes -= bytes
+	_registry_lock.unlock()
 
 
 static func load_registry() -> Dictionary:
