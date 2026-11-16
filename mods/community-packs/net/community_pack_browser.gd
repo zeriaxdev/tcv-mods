@@ -492,7 +492,7 @@ func _on_detail_loaded(detail: Dictionary) -> void:
 	if not _category_text(detail).is_empty(): parts.append(_category_text(detail))
 	if not str(detail.get("version", "")).is_empty(): parts.append("version %s" % str(detail["version"]))
 	if bool(detail.get("content_rated", false)): parts.append("CONTENT-RATED")
-	_detail_meta.text = "  •  ".join(parts)
+	_detail_meta.text = ", ".join(parts)
 	_detail_meta.add_theme_color_override(
 		"font_color", WARNING if bool(detail.get("content_rated", false)) else Color("cccccc"))
 	var description: String = str(detail.get("description", ""))

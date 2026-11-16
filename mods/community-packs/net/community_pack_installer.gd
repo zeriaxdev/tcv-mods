@@ -508,6 +508,9 @@ static func _validate_and_extract_zip(
 		if value is Dictionary: entries.append(value)
 	var found: Dictionary = find_packs(entries)
 	if found.is_empty():
+		for entry: Dictionary in entries:  # a patcher, a build or source code: someone's mod of the game itself
+			if ["exe", "bat", "xdelta", "vcdiff", "pck", "dll", "gd", "py", "sh", "command"].has(str(entry.get("path", "")).get_extension().to_lower()):
+				return {"error": "This is a mod for the game itself, not a pack. Get it from its GameBanana page."}
 		return {"error": "No pack the game can use was found in this archive."}
 	# a Dub Mode upload without its video is a broken dub pack, not a voice pack
 	if str(mod.get("category", "")) == "Dub Mode" and not found.values().has("dub"):

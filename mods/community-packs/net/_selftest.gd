@@ -289,7 +289,9 @@ func _test_pack_types(installer: Script, failures: Array[String]) -> void:
 			"absent": ["packs_menu/stray.png"],
 			"types": {"packs_voice/Family": "voice", "packs_voice/Movie [GB-{id}]": "dub", "packs_studio/TV": "studio"}},
 		{"what": "code mod", "files": ["mod/net/lobby.gd", "README.md", "Install.bat"],
-			"error": "No pack the game can use"},
+			"error": "This is a mod for the game itself"},
+		{"what": "exe patcher", "files": ["Mod/Install_Mod.bat", "Mod/patch/xdelta3.exe", "Mod/patch/game.xdelta"],
+			"error": "This is a mod for the game itself"},
 		{"what": "chatter pack without audio", "files": ["Chat/config_chatter.ini", "Chat/readme.txt"],
 			"error": "No pack the game can use"},
 	]
