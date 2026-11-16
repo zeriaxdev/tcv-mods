@@ -533,7 +533,7 @@ func _refresh_install_action() -> void:
 		_install_progress.max_value = maxi(1, int(job.get("total", file.get("size", 0))))
 		_install_progress.value = clampi(
 			int(job.get("received", 0)), 0, int(_install_progress.max_value))
-		var status: String = str(job.get("status", "Queued"))
+		var status: String = _job_status_text(job)
 		if state == "queued" and CommunityPacks.is_online() and not _downloads.allow_online_downloads():
 			status = "Queued — waiting until you leave online multiplayer."
 		_install_status.text = status
@@ -605,7 +605,7 @@ func _update_selected_active_download() -> bool:
 	_install_progress.visible = true
 	_install_progress.max_value = maxi(1, int(job.get("total", file.get("size", 0))))
 	_install_progress.value = clampi(int(job.get("received", 0)), 0, int(_install_progress.max_value))
-	_install_status.text = str(job.get("status", "Queued"))
+	_install_status.text = _job_status_text(job)
 	if state == "queued" and CommunityPacks.is_online() and not _downloads.allow_online_downloads():
 		_install_status.text = "Queued — waiting until you leave online multiplayer."
 	_install_status.add_theme_color_override("font_color", Color("cccccc"))
@@ -750,6 +750,29 @@ func _render_downloads() -> void:
 const STATUS_ICON_SIZE: int = 22
 
 
+# while it downloads: "1.4 MB/s, about 30 seconds left". Before the first bytes,
+# say who we're waiting on, so 0% doesn't look stuck.
+static func _job_status_text(job: Dictionary) -> String:
+	var status: String = str(job.get("status", job.get("state", "Queued")))
+	if str(job.get("state", "")) != "downloading": return status
+	var received: int = int(job.get("received", 0))
+	if received <= 0: return "Waiting for GameBanana..."
+	var speed: float = float(job.get("speed", 0.0))
+	if speed <= 0.0: return status
+	var text: String = "%.1f MB/s" % (speed / 1e6)
+	var left: int = int(job.get("total", 0)) - received
+	if left > 0: text += ", about %s left" % _duration_text(left / speed)
+	return text
+
+
+static func _duration_text(seconds: float) -> String:
+	if seconds < 60.0:
+		var whole: int = maxi(1, ceili(seconds))
+		return "%d second%s" % [whole, "" if whole == 1 else "s"]
+	var minutes: int = ceili(seconds / 60.0)
+	return "%d minute%s" % [minutes, "" if minutes == 1 else "s"]
+
+
 # drawn here at twice the size: an empty ring while queued, a ring filling up
 # clockwise while it downloads, a tick when it's installed, a cross if it failed.
 static func _status_icon(state: String, fraction: float) -> ImageTexture:
@@ -793,7 +816,7 @@ func _show_download_detail(job: Dictionary) -> void:
 	_detail_content.show()
 	_detail_title.text = str(mod.get("name", "Dub pack"))
 	_detail_meta.text = str(file.get("name", "ZIP"))
-	_detail_description.text = str(job.get("status", job.get("state", "Queued")))
+	_detail_description.text = _job_status_text(job)
 	_install_status.text = str(job.get("error", ""))
 	var state: String = str(job.get("state", ""))
 	_install_progress.visible = state in ["downloading", "verifying", "installing"]
