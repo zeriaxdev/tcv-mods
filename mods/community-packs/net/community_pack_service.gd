@@ -9,6 +9,7 @@ func _ready() -> void:
  downloads.configure(self)
  add_child(downloads)
  add_child(preload("res://net/screen_fit.gd").new())
+ add_child(preload("res://net/dub_keys.gd").new())
  var layer := CanvasLayer.new()
  layer.layer = 128
  add_child(layer)
