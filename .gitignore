@@ -19,3 +19,7 @@ __pycache__/
 # Logs
 *.log
 install_logs/
+
+# Editor and tool caches (design plugins and the like). Never part of the mod.
+.impeccable/
+.DS_Store
