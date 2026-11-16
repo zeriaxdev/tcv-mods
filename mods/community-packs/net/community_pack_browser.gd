@@ -730,6 +730,10 @@ func _render_downloads() -> void:
 		var item := _list.create_item(root_item)
 		var mod: Dictionary = job.get("mod", {})
 		item.set_text(0, str(mod.get("name", "Dub pack")))
+		var size: int = int(job.get("total", 0))
+		item.set_icon(0, _status_icon(str(job.get("state", "")),
+			float(job.get("received", 0)) / size if size > 0 else 0.0))
+		item.set_icon_max_width(0, STATUS_ICON_SIZE)
 		item.set_metadata(0, job)
 		if str(job.get("id", "")) == _selected_job:
 			item.select(0)
@@ -739,6 +743,45 @@ func _render_downloads() -> void:
 		item.set_text(0, "No matching downloads" if not query.is_empty() else "No downloads")
 		item.set_selectable(0, false)
 	_list.set_block_signals(false)
+
+
+const STATUS_ICON_SIZE: int = 22
+
+
+# drawn here at twice the size: an empty ring while queued, a ring filling up
+# clockwise while it downloads, a tick when it's installed, a cross if it failed.
+static func _status_icon(state: String, fraction: float) -> ImageTexture:
+	var n: int = STATUS_ICON_SIZE * 2
+	var image := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var center := Vector2(n, n) / 2.0
+	var radius: float = n / 2.0 - 2.0
+	var disc: Color = {"finished": Color("3f9a5c"), "failed": Color("d0505c"), "canceled": Color("9aa5a8")}.get(state, Color(0, 0, 0, 0))
+	var ring: Color = Color("9aa5a8") if state == "queued" else Color("3a9fb3")
+	if state in ["verifying", "installing"]: fraction = 1.0
+	for y: int in n:
+		for x: int in n:
+			var p := Vector2(x + 0.5, y + 0.5) - center
+			var d: float = p.length()
+			var color := Color(0, 0, 0, 0)
+			if disc.a > 0.0:
+				if d <= radius: color = disc
+			elif absf(d - (radius - 1.5)) <= 1.5:
+				color = ring
+			elif d <= radius - 5.0 and state != "queued" and fposmod(atan2(p.x, -p.y), TAU) <= fraction * TAU:
+				color = ring
+			image.set_pixel(x, y, color)
+	var marks: Array = []
+	if state == "finished": marks = [[Vector2(0.29, 0.52), Vector2(0.44, 0.67)], [Vector2(0.44, 0.67), Vector2(0.72, 0.36)]]
+	elif state in ["failed", "canceled"]: marks = [[Vector2(0.34, 0.34), Vector2(0.66, 0.66)], [Vector2(0.66, 0.34), Vector2(0.34, 0.66)]]
+	for mark: Array in marks:
+		var a: Vector2 = mark[0] * n
+		var b: Vector2 = mark[1] * n
+		for y: int in n:
+			for x: int in n:
+				var p := Vector2(x + 0.5, y + 0.5)
+				var t: float = clampf((p - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+				if p.distance_to(a + (b - a) * t) <= n * 0.05: image.set_pixel(x, y, Color.WHITE)
+	return ImageTexture.create_from_image(image)
 
 
 func _show_download_detail(job: Dictionary) -> void:
