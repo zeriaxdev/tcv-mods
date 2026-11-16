@@ -394,8 +394,12 @@ static func _validate_and_extract_zip(
 		if not _safe_relative_path(path):
 			return {"error": "The archive contains an unsafe path: %s" % path}
 		var ext: String = path.get_extension().to_lower()
+		# anything the game can't use (a creator's source .mp4, a .psd, an .exe)
+		# is left in the archive and never written to disk, instead of refusing
+		# a pack that is fine without it.
 		if not SAFE_EXTENSIONS.has(ext):
-			return {"error": "The dub pack contains a blocked file type: %s" % path}
+			print("Community pack install: skipped %s, the game doesn't use .%s files" % [path, ext])
+			continue
 		var key: String = path.to_lower()
 		if seen.has(key): return {"error": "The archive writes the same path twice: %s" % path}
 		seen[key] = true

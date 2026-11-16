@@ -114,14 +114,17 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 	var packer: = ZIPPacker.new()
 	var zip_error: Error = packer.open(zip_path)
 	if zip_error == OK:
-		for path: String in ["wrapper/dub_video.ogv", "wrapper/line.wav", "wrapper/line.ini"]:
+		# a creator's source video and something worse ride along: both must be
+		# left out, and the pack must still install.
+		for path: String in ["wrapper/dub_video.ogv", "wrapper/line.wav", "wrapper/line.ini",
+				"wrapper/original video.mp4", "wrapper/run me.exe"]:
 			packer.start_file(path)
 			packer.write_file(PackedByteArray([1, 2, 3]))
 			packer.close_file()
 		packer.close()
 		var indexed: Dictionary = installer.inspect_zip(zip_path)
 		var entries: Array = indexed.get("entries", [])
-		if indexed.has("error") or entries.size() != 3:
+		if indexed.has("error") or entries.size() != 5:
 			failures.append("valid ZIP central directory inspection")
 		else:
 			var typed_entries: Array[Dictionary] = []
@@ -142,6 +145,9 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 				var installed: String = str(result.get("path", ""))
 				if not FileAccess.file_exists(installed.path_join("dub_video.ogv")):
 					failures.append("validated ZIP was not moved into packs_voice")
+				if (FileAccess.file_exists(installed.path_join("original video.mp4"))
+					or FileAccess.file_exists(installed.path_join("run me.exe"))):
+					failures.append("file types the game doesn't use were written to disk")
 				_remove_test_tree(installed, test_root)
 			_remove_test_tree(test_root.path_join(".tcv-community-staging"), test_root)
 			DirAccess.remove_absolute(test_root)
