@@ -1,6 +1,7 @@
 extends RefCounted
 ## Caption translations for dub packs, kept on this computer in
-## user://translations/<pack folder>/translation.txt. Nothing is written into the
+## user://translations/<pack folder>/<name>.txt, one file per imported translation,
+## plus a `chosen` file naming the one Dub Mode shows. Nothing is written into the
 ## pack folder, so the pack stays the same file for file (online pack checks match).
 ##
 ## Script file, one line per captioned clip, sorted by file name:
@@ -12,8 +13,12 @@ const BUTTON := preload("res://net/choicer_button.gd")
 const ROOT := "user://translations/"
 
 
-static func file_for(pack: PackInfo) -> String:
-	return ROOT + pack.folder_name.trim_suffix("/").validate_filename() + "/translation.txt"
+static func dir_for(pack: PackInfo) -> String:
+	return ROOT + pack.folder_name.trim_suffix("/").validate_filename() + "/"
+
+
+static func file_for(pack: PackInfo, name: String) -> String:
+	return dir_for(pack) + name + ".txt"
 
 
 ## The clip's path inside its pack, like "01_intro.wav" or "act 2/05_door.wav".
@@ -69,19 +74,61 @@ static func parse(text: String, ids: PackedStringArray = []) -> Dictionary:
 	return out
 
 
-## Translated captions this pack has on this computer, by clip id.
+# --- Saved translations ---
+
+## Names of this pack's translations, in alphabetical order.
+static func names(pack: PackInfo) -> PackedStringArray:
+	var out := PackedStringArray()
+	if not DirAccess.dir_exists_absolute(dir_for(pack)): return out
+	for file: String in DirAccess.get_files_at(dir_for(pack)):
+		if file.get_extension() == "txt": out.append(file.get_basename())
+	out.sort()
+	return out
+
+
+## The translation Dub Mode shows for this pack, or "" for the original captions.
+static func chosen(pack: PackInfo) -> String:
+	var name := FileAccess.get_file_as_string(dir_for(pack) + "chosen").strip_edges()
+	return name if name != "" and FileAccess.file_exists(file_for(pack, name)) else ""
+
+
+static func choose(pack: PackInfo, name: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir_for(pack))
+	var file := FileAccess.open(dir_for(pack) + "chosen", FileAccess.WRITE)
+	if file: file.store_string(name)
+
+
+static func remove(pack: PackInfo, name: String) -> void:
+	if chosen(pack) == name: choose(pack, "")
+	DirAccess.remove_absolute(file_for(pack, name))
+
+
+static func captions(pack: PackInfo, name: String) -> Dictionary:
+	if name == "" or not FileAccess.file_exists(file_for(pack, name)): return {}
+	return parse(FileAccess.get_file_as_string(file_for(pack, name)))
+
+
+## Translated captions Dub Mode shows for this pack, by clip id.
 static func saved(pack: PackInfo) -> Dictionary:
-	if not FileAccess.file_exists(file_for(pack)): return {}
-	return parse(FileAccess.get_file_as_string(file_for(pack)))
+	return captions(pack, chosen(pack))
 
 
-## Saves the translated lines of `text` for this pack. Returns how many captions
-## it translates; 0 leaves any earlier translation as it was.
-static func import_text(text: String, clips: Array, pack: PackInfo) -> int:
+## A translation's name from the file it came from: "Backrooms suomi.txt" -> "suomi".
+static func name_from(path: String, pack: PackInfo) -> String:
+	var name := path.get_file().get_basename().strip_edges()
+	if name.to_lower().begins_with(pack.display_name.to_lower()): name = name.substr(pack.display_name.length())
+	if name.to_lower().ends_with(" script"): name = name.left(-7)
+	name = name.strip_edges().lstrip("-_ ").rstrip("-_ ").validate_filename()
+	return name if name != "" and name != "chosen" else "Translation"
+
+
+## Saves the translated lines of `text` as this pack's translation `name` and
+## chooses it. Returns how many captions it translates; 0 saves nothing.
+static func import_text(text: String, clips: Array, pack: PackInfo, name: String) -> int:
 	var lines := _lines(clips, pack)
 	var ids := PackedStringArray(lines.map(func(line: Array) -> String: return line[0]))
 	var found := parse(text, ids)
-	var out := "# Translation of \"%s\", imported %s\n\n" % [pack.display_name, Time.get_date_string_from_system()]
+	var out := "# %s translation of \"%s\", imported %s\n\n" % [name, pack.display_name, Time.get_date_string_from_system()]
 	var count := 0
 	for i: int in lines.size():
 		var caption: String = found.get(lines[i][0], "")
@@ -89,10 +136,12 @@ static func import_text(text: String, clips: Array, pack: PackInfo) -> int:
 		out += _row(i + 1, lines[i][0], lines[i][1], caption)
 		count += 1
 	if count == 0: return 0
-	DirAccess.make_dir_recursive_absolute(file_for(pack).get_base_dir())
-	var file := FileAccess.open(file_for(pack), FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute(dir_for(pack))
+	var file := FileAccess.open(file_for(pack, name), FileAccess.WRITE)
 	if file == null: return 0
 	file.store_string(out)
+	file.close()
+	choose(pack, name)
 	return count
 
 
@@ -141,69 +190,175 @@ static func add_button(start: Control, pack: PackInfo, clips: Array) -> void:
 	if button == null:
 		button = BUTTON.new()
 		button.name = "BtnTranslation"
-		button.text = "Translation"
 		button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(button)
 		row.move_child(button, start.get_index() + 1)
-		button.pressed.connect(func() -> void: _open(button))
+		button.pressed.connect(func() -> void: open(button))
 	button.set_meta("pack", pack)
 	button.set_meta("clips", clips)
+	button.text = _button_text(pack)
 	button.disabled = _lines(clips, pack).is_empty()
 
 
-static func _status(pack: PackInfo, clips: Array) -> String:
-	var count := saved(pack).size()
-	if count == 0: return "No translation yet.\nExport the script, translate the captions, then import it here."
-	return "%d of %d captions translated." % [count, _lines(clips, pack).size()]
+static func _button_text(pack: PackInfo) -> String:
+	return "Translation: " + chosen(pack) if chosen(pack) != "" else "Translation"
 
 
-static func _open(button: Control) -> void:
+## The Translation window: pick which translation Dub Mode shows, export, import, remove.
+static func open(button: Control) -> Control:
 	var pack: PackInfo = button.get_meta("pack")
 	var clips: Array = button.get_meta("clips")
-	var dialog := AcceptDialog.new()
-	dialog.theme = STYLE.dialog_theme()
-	dialog.borderless = true  # the window title bar would sit outside the white box
-	dialog.ok_button_text = "Close"
-	dialog.dialog_text = _status(pack, clips)
-	# Each button goes to the left of the ones before it.
-	var remove := dialog.add_button("Remove", false, "remove")
-	dialog.add_button("Import translation", false, "import")
-	dialog.add_button("Export script", false, "export")
-	remove.disabled = not FileAccess.file_exists(file_for(pack))
-	dialog.custom_action.connect(_on_action.bind(dialog, remove, pack, clips))
-	dialog.visibility_changed.connect(func() -> void: if not dialog.visible: dialog.queue_free())
-	button.add_child(dialog)
-	dialog.popup_centered()
+	var layer := CanvasLayer.new()
+	layer.layer = 140
+	button.add_child(layer)
+	var modal := Control.new()
+	modal.theme = STYLE.make_theme()
+	for state: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		modal.theme.set_color(state, "Label", Color.WHITE)
+		modal.theme.set_color(state, "CheckBox", Color.WHITE)
+	modal.theme.set_icon("radio_unchecked", "CheckBox", _radio(false))
+	modal.theme.set_icon("radio_checked", "CheckBox", _radio(true))
+	modal.size = button.get_viewport().get_visible_rect().size
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(modal)
+	var backdrop := ColorRect.new()
+	backdrop.color = Color(0, 0, 0, 0.8)
+	modal.add_child(backdrop)
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var center := CenterContainer.new()
+	modal.add_child(center)
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	panel.custom_minimum_size.x = 640
+	var fill := Panel.new()  # the panel art is see-through; keep the page behind it out of the way
+	fill.add_theme_stylebox_override("panel", STYLE.box(Color("151719"), Color("151719"), 10))
+	fill.show_behind_parent = true
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(fill)
+	fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 4)
+	STYLE.dark_panel(panel)
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for side: String in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 24)
+	panel.add_child(margin)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	margin.add_child(column)
+
+	var title := Label.new()
+	title.text = "TRANSLATION"
+	title.add_theme_font_size_override("font_size", 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = pack.display_name
+	subtitle.modulate = Color(1, 1, 1, 0.7)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(subtitle)
+	column.add_child(HSeparator.new())
+
+	var list := VBoxContainer.new()
+	list.name = "List"
+	list.add_theme_constant_override("separation", 6)
+	column.add_child(list)
+	var message := Label.new()
+	message.name = "Message"
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	message.add_theme_color_override("font_color", Color("ffd36a"))
+	column.add_child(message)
+	var refresh := func() -> void: _fill(list, button)
+	refresh.call()
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	column.add_child(buttons)
+	var export := BUTTON.new()
+	export.text = "Export script"
+	buttons.add_child(export)
+	var import := BUTTON.new()
+	import.text = "Import translation"
+	buttons.add_child(import)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(spacer)
+	var close := BUTTON.new()
+	close.text = "Close"
+	buttons.add_child(close)
+
+	close.pressed.connect(func() -> void:
+		button.text = _button_text(pack)
+		layer.queue_free())
+	export.pressed.connect(func() -> void:
+		var name := (pack.display_name + " script.txt").validate_filename()
+		_pick(modal, FileDialog.FILE_MODE_SAVE_FILE, name, _export.bind(message, pack, clips)))
+	import.pressed.connect(func() -> void:
+		_pick(modal, FileDialog.FILE_MODE_OPEN_FILE, "", _import.bind(message, refresh, pack, clips)))
+	close.grab_focus.call_deferred()
+	return modal
 
 
-static func _on_action(action: StringName, dialog: AcceptDialog, remove: Button, pack: PackInfo, clips: Array) -> void:
-	match action:
-		"export":
-			var name := (pack.display_name + " script.txt").validate_filename()
-			_pick(dialog, FileDialog.FILE_MODE_SAVE_FILE, name, _export.bind(dialog, pack, clips))
-		"import":
-			_pick(dialog, FileDialog.FILE_MODE_OPEN_FILE, "", _import.bind(dialog, remove, pack, clips))
-		"remove":
-			DirAccess.remove_absolute(file_for(pack))
-			remove.disabled = true
-			dialog.dialog_text = "Translation removed. Dub Mode shows the original captions again."
+## A white ring, with a dot when picked: the default ones vanish on the dark panel.
+static func _radio(picked: bool) -> ImageTexture:
+	var image := Image.create_empty(22, 22, false, Image.FORMAT_RGBA8)
+	for x: int in 22:
+		for y: int in 22:
+			var d := Vector2(x + 0.5, y + 0.5).distance_to(Vector2(11, 11))
+			var a := clampf(1.5 - absf(d - 9.0), 0.0, 1.0) + (clampf(5.5 - d, 0.0, 1.0) if picked else 0.0)
+			image.set_pixel(x, y, Color(1, 1, 1, minf(a, 1.0)))
+	return ImageTexture.create_from_image(image)
 
 
-static func _export(path: String, dialog: AcceptDialog, pack: PackInfo, clips: Array) -> void:
+## One row per translation plus "Original captions"; picking one is saved right away.
+static func _fill(list: VBoxContainer, button: Control) -> void:
+	var pack: PackInfo = button.get_meta("pack")
+	var clips: Array = button.get_meta("clips")
+	for child: Node in list.get_children(): child.queue_free()
+	var group := ButtonGroup.new()
+	var total := _lines(clips, pack).size()
+	var current := chosen(pack)
+	for name: String in [""] + Array(names(pack)):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		list.add_child(row)
+		var pick := CheckBox.new()
+		pick.button_group = group
+		pick.text = name if name != "" else "Original captions"
+		pick.button_pressed = name == current
+		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pick.toggled.connect(func(on: bool) -> void: if on: choose(pack, name))
+		row.add_child(pick)
+		if name == "": continue
+		var count := Label.new()
+		count.text = "%d of %d lines" % [captions(pack, name).size(), total]
+		count.modulate = Color(1, 1, 1, 0.7)
+		row.add_child(count)
+		var drop := BUTTON.new()
+		drop.use_small()
+		drop.text = "Remove"
+		drop.pressed.connect(func() -> void:
+			remove(pack, name)
+			_fill(list, button))
+		row.add_child(drop)
+
+
+static func _export(path: String, message: Label, pack: PackInfo, clips: Array) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		dialog.dialog_text = "Couldn't save there. Try another folder."
+		message.text = "Couldn't save there. Try another folder."
 		return
 	file.store_string(script_text(clips, pack))
 	file.close()
-	dialog.dialog_text = "Saved %s.\nTranslate the captions, then come back and import it." % path.get_file()
+	message.text = "Saved %s. Translate the captions, then import it here." % path.get_file()
 
 
-static func _import(path: String, dialog: AcceptDialog, remove: Button, pack: PackInfo, clips: Array) -> void:
-	var count := import_text(FileAccess.get_file_as_string(path), clips, pack)
-	if count == 0: dialog.dialog_text = "No translated captions for this pack in %s." % path.get_file()
-	else: dialog.dialog_text = "Imported. " + _status(pack, clips)
-	remove.disabled = not FileAccess.file_exists(file_for(pack))
+static func _import(path: String, message: Label, refresh: Callable, pack: PackInfo, clips: Array) -> void:
+	var name := name_from(path, pack)
+	var count := import_text(FileAccess.get_file_as_string(path), clips, pack, name)
+	if count == 0: message.text = "No translated captions for this pack in %s." % path.get_file()
+	else: message.text = "Imported %s. Dub Mode now shows it." % name
+	refresh.call()
 
 
 static func _pick(parent: Node, mode: FileDialog.FileMode, file_name: String, done: Callable) -> void:

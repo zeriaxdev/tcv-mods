@@ -29,6 +29,12 @@ func _pack_fingerprint() -> String:
 	return out
 
 
+func _clear(dir: String) -> void:
+	if not DirAccess.dir_exists_absolute(dir): return
+	for name: String in DirAccess.get_files_at(dir): DirAccess.remove_absolute(dir + name)
+	DirAccess.remove_absolute(dir)
+
+
 func _initialize() -> void: call_deferred("run")
 
 
@@ -52,7 +58,7 @@ func run() -> void:
 	collection.generate_from_pack_info(pack, false, false)
 	var clips: Array = collection.data
 	assert(clips.size() == 4, "loaded %d clips" % clips.size())
-	DirAccess.remove_absolute(T.file_for(pack))
+	_clear(T.dir_for(pack))
 
 	var script: String = T.script_text(clips, pack)
 	print(script)
@@ -67,12 +73,24 @@ func run() -> void:
 	translated = translated.replace("Hello there.\\nHow are you?", "Hei siellä.\\ nMitä kuuluu?")
 	translated = translated.replace("02_reply.wav | Lois | You're late | again.", "02_vastaus.wav | Lois | Myöhässä | taas.")
 	translated = translated.replace("Knock knock.", "Koputus.")
-	assert(T.import_text("﻿" + translated.replace("\n", "\r\n"), clips, pack) == 3)
+	assert(T.import_text("﻿" + translated.replace("\n", "\r\n"), clips, pack, "suomi") == 3)
 	var saved: Dictionary = T.saved(pack)
 	assert(saved == {"01_intro.wav": "Hei siellä.\nMitä kuuluu?", "02_reply.wav": "Myöhässä | taas.", "05_door.wav": "Koputus."}, str(saved))
-	assert(T.import_text("nothing useful", clips, pack) == 0 and T.saved(pack).size() == 3, "an empty import keeps the old one")
-	assert(T.file_for(pack).begins_with("user://translations/test_translation_pack/"), T.file_for(pack))
+	assert(T.import_text("nothing useful", clips, pack, "empty") == 0 and T.names(pack) == PackedStringArray(["suomi"]), "an empty import saves nothing")
+	assert(T.file_for(pack, "suomi") == "user://translations/test_translation_pack/suomi.txt", T.file_for(pack, "suomi"))
 	assert(_pack_fingerprint() == before, "the pack folder changed")
+	# A second translation of the same pack is chosen on import; the first stays.
+	assert(T.name_from("/x/test_translation_pack - Mikko script.txt", pack) == "Mikko")
+	assert(T.name_from("/x/test_translation_pack script.txt", pack) == "Translation")
+	assert(T.import_text(script.replace("Not translated.", "Ei käännetty."), clips, pack, "Mikko") == 1)
+	assert(T.names(pack) == PackedStringArray(["Mikko", "suomi"]) and T.chosen(pack) == "Mikko")
+	assert(T.saved(pack) == {"03_quiet.wav": "Ei käännetty."})
+	T.choose(pack, "")
+	assert(T.saved(pack).is_empty(), "Original captions shows no translation")
+	T.choose(pack, "Mikko")
+	T.remove(pack, "Mikko")
+	assert(T.chosen(pack) == "" and T.names(pack) == PackedStringArray(["suomi"]), "removing the chosen one goes back to the original")
+	T.choose(pack, "suomi")
 	print("PASS: import matches by file name, falls back to the number, and leaves the pack alone")
 
 	var label := Label.new()
@@ -104,10 +122,20 @@ func run() -> void:
 	T.add_button(start, pack, clips)
 	T.add_button(start, pack, clips)
 	assert(row.get_child_count() == 3 and row.get_child(1).name == "BtnTranslation")
-	assert(T._status(pack, clips) == "3 of 4 captions translated.")
-	print("PASS: one Translation button next to Start")
+	assert(row.get_child(1).text == "Translation: suomi")
+	print("PASS: one Translation button next to Start, naming the chosen translation")
 
-	DirAccess.remove_absolute(T.file_for(pack))
+	var modal: Control = T.open(row.get_child(1))
+	await process_frame
+	var list: Node = modal.find_child("List", true, false)
+	var rows: Array = list.get_children().filter(func(n: Node) -> bool: return not n.is_queued_for_deletion())
+	assert(rows.size() == 2 and rows[0].get_child(0).text == "Original captions" and rows[1].get_child(0).button_pressed)
+	assert(rows[1].get_child(1).text == "3 of 4 lines")
+	rows[0].get_child(0).button_pressed = true
+	assert(T.chosen(pack) == "", "picking Original captions is saved")
+	print("PASS: the Translation window lists the translations and saves the pick")
+
+	_clear(T.dir_for(pack))
 	for dir: String in [PACK]:
 		for name: String in DirAccess.get_files_at(dir): DirAccess.remove_absolute(dir + name)
 		DirAccess.remove_absolute(dir)

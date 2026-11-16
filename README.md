@@ -115,9 +115,11 @@ Pick a pack in Dub Mode and press **Translation** next to **Start**.
    1 | 01_intro.wav | Clark | Hello there.\nHow are you?
    ```
 2. Translate the caption at the end of each line, by hand or by pasting the whole file into a translator and copying the result back. Leave the number, file name and character alone. `\n` starts a new line inside a caption.
-3. **Import translation** loads the file. Lines you skipped keep the original caption.
+3. **Import translation** loads the file and Dub Mode starts using it. Lines you skipped keep the original caption.
 
-The translation is saved on your computer in `translations/<pack folder>/translation.txt` (see [Where your files are](#where-your-files-are)), never in the pack, so online games still see the same pack. To dub together in your language, send your friends the translated file and have each of them import it. **Remove** goes back to the original captions.
+A pack can have more than one translation, like a second language or a friend's version. Each import is named after its file, so `Backrooms suomi.txt` becomes **suomi**. Importing a file with the same name again replaces that translation. Pick the one Dub Mode shows in the same window, or pick **Original captions** to turn translations off. The button on the pack page shows your pick, for example **Translation: suomi**.
+
+Translations are saved on your computer in `translations/<pack folder>` (see [Where your files are](#where-your-files-are)), never in the pack, so online games still see the same pack. To dub together in your language, send your friends the translated file and have each of them import it.
 
 ### Export older dubs, or back them up
 
