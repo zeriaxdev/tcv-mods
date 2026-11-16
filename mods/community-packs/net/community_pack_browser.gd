@@ -356,7 +356,7 @@ func _build_ui() -> void:
 		if url.begins_with("https://gamebanana.com/"): OS.shell_open(url))
 	detail_buttons.add_child(_open_button)
 	var caution: = Label.new()
-	caution.text = ("Downloads are community content. ZIP and RAR archives are staged and checked before installation, "
+	caution.text = ("Downloads are community content. ZIP, RAR and 7z archives are staged and checked before installation, "
 		+ "but only install packs from creators you trust.")
 	caution.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	caution.add_theme_color_override("font_color", WARNING)
@@ -585,6 +585,9 @@ func _on_downloads_changed() -> void:
 	if _view_mode == "downloads":
 		_render_downloads()
 		return
+	# the download bar belongs to the Browse page. on Installed packs it landed on
+	# whatever pack was open, showing someone else's download as 0%.
+	if _view_mode != "browse": return
 	if not _update_selected_active_download(): _refresh_install_action()
 
 
