@@ -38,7 +38,7 @@ func _on_node_added(node: Node) -> void:
 	var path: String = node.scene_file_path
 	if path.ends_with("/display_settings_block.tscn"):
 		node.ready.connect(_add_toggle.bind(node), CONNECT_ONE_SHOT)
-	elif path.ends_with("/dub_mode/main/dub_mode.tscn"):
+	elif path.ends_with("/dub_mode/main/dub_mode.tscn") or path.ends_with("/dub_mode/peripheral/dub_mode_freestyle.tscn"):
 		node.ready.connect(func() -> void:
 			_dub = node
 			_fit_dub_screen(), CONNECT_ONE_SHOT)

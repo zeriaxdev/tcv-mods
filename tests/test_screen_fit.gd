@@ -49,16 +49,17 @@ func run():
 		print("SKIP: no dub pack in the test data folder for the dub screen check")
 	else:
 		root.get_node("Metro").gameplay_resource_dub_mode = load("res://common/niche/game_mode_resources/gameplay_resource_dub_mode.gd").new(pack)
-		world.enter_dub_mode()
-		await settle(5.0)
-		var dub: Node = null
-		for child in world.primary_capsule.get_children(): if child.has_node("Visuals"): dub = child
-		assert(dub != null, "the dub screen didn't open")
-		var visuals: Control = dub.get_node("Visuals")
-		assert(visuals.size == Vector2(1152, 648), "the dub layout isn't 1152x648: %s" % visuals.size)
-		var extra: Vector2 = (dub.get_viewport_rect().size - Vector2(1152, 648)) / 2.0
-		assert(visuals.position.is_equal_approx(extra), "the dub layout isn't centered")
-		assert(visuals.get_node("Scanlines").get_global_rect().size.is_equal_approx(dub.get_viewport_rect().size), "the background doesn't fill the screen")
+		for enter: String in ["enter_dub_mode", "enter_dub_freestyle"]:
+			world.call(enter)
+			await settle(5.0)
+			var dub: Node = null
+			for child in world.primary_capsule.get_children(): if child.has_node("Visuals"): dub = child
+			assert(dub != null, "%s didn't open a dub screen" % enter)
+			var visuals: Control = dub.get_node("Visuals")
+			assert(visuals.size == Vector2(1152, 648), "%s layout isn't 1152x648: %s" % [enter, visuals.size])
+			var extra: Vector2 = (dub.get_viewport_rect().size - Vector2(1152, 648)) / 2.0
+			assert(visuals.position.is_equal_approx(extra), "%s layout isn't centered" % enter)
+			assert(visuals.get_node("Scanlines").get_global_rect().size.is_equal_approx(dub.get_viewport_rect().size), "%s background doesn't fill the screen" % enter)
 
 	if had_file:
 		var output := FileAccess.open(saved, FileAccess.WRITE)
