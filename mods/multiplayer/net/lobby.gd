@@ -502,7 +502,8 @@ static var MIC_GRADIENT: Gradient = (func() -> Gradient:
 	g.offsets = PackedFloat32Array([0.0, 0.6, 0.85, 1.0])
 	g.colors = PackedColorArray([Color("4fd47a"), Color("ffd84d"), Color("ff9a3d"), Color("ff5252")])
 	return g).call()
-var _mic_track: StyleBoxFlat
+# track, rounding mask and outline, made on first draw
+var _mic_track: Array[StyleBoxFlat] = []
 var _mic_level := 0.0
 var _mic_player: AudioStreamPlayer
 var _mic_capture: AudioEffectCapture
@@ -534,21 +535,34 @@ func _draw_mic_meter(item: TreeItem, rect: Rect2) -> void:
 	var text_width: float = font.get_string_size(item.get_text(1), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var x: float = rect.position.x + player_rows.get_theme_constant("inner_item_margin_left") + text_width + 10.0
 	var box := Rect2(Vector2(x, rect.get_center().y - MIC_METER_SIZE.y / 2.0), MIC_METER_SIZE)
-	if _mic_track == null:
-		_mic_track = StyleBoxFlat.new()
-		_mic_track.bg_color = Color("e4eef0")
-		_mic_track.border_color = Color("c2d6da")
-		_mic_track.set_border_width_all(1)
-		_mic_track.set_corner_radius_all(3)
-	player_rows.draw_style_box(_mic_track, box)
+	if _mic_track.is_empty():
+		var track := StyleBoxFlat.new()
+		track.bg_color = Color("e4eef0")
+		track.set_corner_radius_all(4)
+		# drawn over the fill in the track's own color, so the fill's square
+		# corners take the track's rounded shape instead of poking out.
+		var mask := StyleBoxFlat.new()
+		mask.draw_center = false
+		mask.border_color = track.bg_color
+		mask.set_border_width_all(2)
+		mask.set_corner_radius_all(4)
+		var outline := StyleBoxFlat.new()
+		outline.draw_center = false
+		outline.border_color = Color("c2d6da")
+		outline.set_border_width_all(1)
+		outline.set_corner_radius_all(4)
+		_mic_track = [track, mask, outline]
+	player_rows.draw_style_box(_mic_track[0], box)
 	# one gradient over the whole height, filled from the bottom: green while
 	# talking normally, yellow and orange when loud, red only right at the top.
-	var inner := box.grow(-1.5)
+	var inner := box.grow(-2.0)
 	var lit: int = int(round(inner.size.y * _mic_level))
 	for row: int in lit:
 		var y: float = inner.end.y - row - 1
-		player_rows.draw_rect(Rect2(inner.position.x, y, inner.size.x, 1.0),
+		player_rows.draw_rect(Rect2(box.position.x + 1.0, y, box.size.x - 2.0, 1.0),
 			MIC_GRADIENT.sample(float(row) / inner.size.y))
+	player_rows.draw_style_box(_mic_track[1], box)
+	player_rows.draw_style_box(_mic_track[2], box)
 
 
 func _start_mic_test() -> void:
