@@ -93,6 +93,7 @@ static func chosen(pack: PackInfo) -> String:
 
 
 static func choose(pack: PackInfo, name: String) -> void:
+	_saved.erase(dir_for(pack))
 	DirAccess.make_dir_recursive_absolute(dir_for(pack))
 	var file := FileAccess.open(dir_for(pack) + "chosen", FileAccess.WRITE)
 	if file: file.store_string(name)
@@ -101,6 +102,7 @@ static func choose(pack: PackInfo, name: String) -> void:
 static func remove(pack: PackInfo, name: String) -> void:
 	if chosen(pack) == name: choose(pack, "")
 	DirAccess.remove_absolute(file_for(pack, name))
+	_saved.erase(dir_for(pack))
 
 
 static func captions(pack: PackInfo, name: String) -> Dictionary:
@@ -108,9 +110,19 @@ static func captions(pack: PackInfo, name: String) -> Dictionary:
 	return parse(FileAccess.get_file_as_string(file_for(pack, name)))
 
 
-## Translated captions Dub Mode shows for this pack, by clip id.
+static var _saved := {}  # pack dir -> captions; cleared whenever the chosen translation changes
+
+
+## Translated captions Dub Mode shows for this pack, by clip id. Read once per
+## pack, not once per line.
 static func saved(pack: PackInfo) -> Dictionary:
-	return captions(pack, chosen(pack))
+	if not _saved.has(dir_for(pack)): _saved[dir_for(pack)] = captions(pack, chosen(pack))
+	return _saved[dir_for(pack)]
+
+
+## The caption to show for a clip: its translation, or the pack's own.
+static func caption_for(clip: OmniClip, pack: PackInfo) -> String:
+	return saved(pack).get(clip_id(clip, pack), clip.clip_caption)
 
 
 ## A translation's name from the file it came from: "Backrooms suomi.txt" -> "suomi".

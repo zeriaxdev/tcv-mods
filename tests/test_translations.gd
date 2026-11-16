@@ -91,6 +91,12 @@ func run() -> void:
 	T.remove(pack, "Mikko")
 	assert(T.chosen(pack) == "" and T.names(pack) == PackedStringArray(["suomi"]), "removing the chosen one goes back to the original")
 	T.choose(pack, "suomi")
+	var cached: Dictionary = T.saved(pack)
+	assert(is_same(T.saved(pack), cached), "read once per pack, not per line")
+	var clip_by_name := {}
+	for clip in clips: clip_by_name[clip.file_name] = clip
+	assert(T.caption_for(clip_by_name["01_intro.wav"], pack) == "Hei siellä.\nMitä kuuluu?", "Freestyle gets the translation")
+	assert(T.caption_for(clip_by_name["03_quiet.wav"], pack) == clip_by_name["03_quiet.wav"].clip_caption, "untranslated lines keep the pack's caption")
 	print("PASS: import matches by file name, falls back to the number, and leaves the pack alone")
 
 	var label := Label.new()

@@ -1,0 +1,8 @@
+--- a/scenes/gameplay/dub_mode/peripheral/dub_mode_freestyle.gd
++++ b/scenes/gameplay/dub_mode/peripheral/dub_mode_freestyle.gd
+@@ -172,1 +172,1 @@
+-	lbl.modulate = Color.WEB_GRAY;lbl.text = clip.clip_caption;lbl.set_meta("start_time", time);lbl.set_meta("clip", clip)
++	lbl.modulate = Color.WEB_GRAY;lbl.text = preload("res://net/pack_translation.gd").caption_for(clip, resource.pack_info);lbl.set_meta("start_time", time);lbl.set_meta("clip", clip)
+@@ -178,1 +178,1 @@
+-		if clip.dub_timestamps.has(clip_time) and clip.clip_caption == lbl.text: lbl.text = ""
++		if clip.dub_timestamps.has(clip_time) and lbl.get_meta("clip", null) == clip: lbl.text = ""
