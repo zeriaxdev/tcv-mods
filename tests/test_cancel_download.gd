@@ -24,7 +24,7 @@ func check_cancel():
  for i in 30: await process_frame
  assert(installer._thread == null, "worker was not joined after cancel")
  assert(not FileAccess.file_exists(installer.DOWNLOAD_ROOT.path_join("cancel-test.part")), "partial file left behind")
- assert(root.get_node("CommunityPacks").downloads._active_id == "")
+ assert(root.get_node("CommunityPacks").downloads._active.is_empty())
  peer.disconnect_from_host()
  server.stop()
  print("PASS: cancel returned in %d ms with a stalled server, worker joined, partial file removed" % elapsed)

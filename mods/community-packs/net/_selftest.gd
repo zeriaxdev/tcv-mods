@@ -15,6 +15,8 @@ class QueueTestInstaller:
 	func cancel() -> void:
 		busy = false
 		failed.emit("Download canceled.")
+	func install(_mod: Dictionary, _file: Dictionary) -> void:
+		busy = true
 
 func _ready() -> void:
 	var failures: Array[String] = []
@@ -247,12 +249,13 @@ func _run_download_queue_tests(failures: Array[String]) -> void:
 	queue.retry(id)
 	if str(queue.get_job(id).get("state", "")) != "queued":
 		failures.append("canceled download retry")
-	var real_installer: Node = queue.get("_installer")
+	var real_pool: Array[Node] = queue.get("_pool")
 	var fake_installer: = QueueTestInstaller.new()
-	fake_installer.failed.connect(Callable(queue, "_on_failed"))
+	fake_installer.failed.connect(Callable(queue, "_on_failed").bind(fake_installer))
 	queue.add_child(fake_installer)
-	queue.set("_installer", fake_installer)
-	queue.set("_active_id", id)
+	var one_fake: Array[Node] = [fake_installer]
+	queue.set("_pool", one_fake)
+	queue.get("_active")[fake_installer] = id
 	var jobs: Array = queue.get("_jobs")
 	jobs[0]["state"] = "downloading"
 	fake_installer.busy = true
@@ -262,8 +265,31 @@ func _run_download_queue_tests(failures: Array[String]) -> void:
 		failures.append("active download cancellation did not release the queue")
 	queue.dismiss(id)
 	if not queue.get_job(id).is_empty(): failures.append("terminal download dismissal")
-	queue.set("_installer", real_installer)
 	fake_installer.queue_free()
+
+	# three at once, the fourth waits its turn
+	var fakes: Array[Node] = []
+	for slot: int in 3:
+		var fake: = QueueTestInstaller.new()
+		queue.add_child(fake)
+		fakes.append(fake)
+	queue.set("_pool", fakes)
+	fake_net.online = false
+	var parallel_ids: Array[String] = []
+	for n: int in 4:
+		parallel_ids.append(queue.enqueue({"id": 60 + n, "name": "Parallel %d" % n}, {"id": 70 + n, "name": "p.zip", "size": 100}))
+	queue._pump()
+	var states: Array = parallel_ids.map(func(job: String) -> String: return str(queue.get_job(job).get("state", "")))
+	if states.count("downloading") != 3 or states.count("queued") != 1:
+		failures.append("parallel downloads: wanted 3 downloading and 1 queued, got %s" % str(states))
+	queue.set("_active", {})
+	for job: String in parallel_ids:
+		var jobs_now: Array = queue.get("_jobs")
+		for record: Dictionary in jobs_now: if record["id"] == job: record["state"] = "failed"
+		queue.dismiss(job)
+	for fake: Node in fakes: fake.queue_free()
+	fake_net.online = true
+	queue.set("_pool", real_pool)
 
 	fake_net.online = false
 	var failed_id: String = queue.enqueue({"id": 43, "name": "Bad archive"}, invalid_file)

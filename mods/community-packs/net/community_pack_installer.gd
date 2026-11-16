@@ -508,13 +508,17 @@ static func _validate_and_extract_zip(
 		return {"error": "Could not move the verified pack into packs_voice (%s)." % error_string(move_error)}
 	if not use_registry:
 		return {"path": destination, "files": chosen.size(), "bytes": total}
+	_registry_lock.lock()
+	registry = load_registry()  # fresh: another install may have finished meanwhile
 	registry[str(mod.get("id", 0))] = {
 		"path": destination,
 		"file_id": int(file.get("id", 0)),
 		"md5": str(file.get("md5", "")),
 		"name": str(mod.get("name", "Dub pack")),
 	}
-	if not save_registry(registry):
+	var saved: bool = save_registry(registry)
+	_registry_lock.unlock()
+	if not saved:
 		# Installation is still complete; the embedded manifest lets a later run
 		# rediscover it even if this convenience index could not be written.
 		return {"path": destination, "warning": "Installed, but could not update the local pack index."}
@@ -645,6 +649,8 @@ static func installed_path(mod_id: int) -> String:
 		if not FileAccess.file_exists(manifest_path): continue
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
 		if not parsed is Dictionary or int(parsed.get("mod_id", 0)) != mod_id: continue
+		_registry_lock.lock()
+		registry = load_registry()
 		registry[str(mod_id)] = {
 			"path": candidate,
 			"file_id": int(parsed.get("file_id", 0)),
@@ -652,6 +658,7 @@ static func installed_path(mod_id: int) -> String:
 			"name": str(parsed.get("name", folder)),
 		}
 		save_registry(registry)
+		_registry_lock.unlock()
 		return candidate
 	return ""
 
@@ -714,24 +721,36 @@ static func _uninstall_path(
 	if not _remove_installed_tree(path, path):
 		return {"error": "Could not completely remove the installed pack."}
 	if update_registry:
+		_registry_lock.lock()
 		var registry: Dictionary = load_registry()
 		registry.erase(str(mod_id))
 		save_registry(registry)
+		_registry_lock.unlock()
 	return {"path": path}
 
 
+# up to three installs can finish at once on their own threads, and the browser
+# reads this from the main thread. Godot's Mutex is recursive, so the
+# read-edit-save spots above hold it across both calls.
+static var _registry_lock: Mutex = Mutex.new()
+
+
 static func load_registry() -> Dictionary:
-	if not FileAccess.file_exists(REGISTRY_PATH): return {}
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(REGISTRY_PATH))
+	_registry_lock.lock()
+	var text: String = FileAccess.get_file_as_string(REGISTRY_PATH) if FileAccess.file_exists(REGISTRY_PATH) else ""
+	_registry_lock.unlock()
+	var parsed: Variant = JSON.parse_string(text) if not text.is_empty() else null
 	return parsed if parsed is Dictionary else {}
 
 
 static func save_registry(registry: Dictionary) -> bool:
+	_registry_lock.lock()
 	var output: FileAccess = FileAccess.open(REGISTRY_PATH, FileAccess.WRITE)
-	if output == null: return false
-	output.store_string(JSON.stringify(registry, "  "))
-	output.close()
-	return true
+	if output != null:
+		output.store_string(JSON.stringify(registry, "  "))
+		output.close()
+	_registry_lock.unlock()
+	return output != null
 
 
 static func _safe_relative_path(path: String) -> bool:

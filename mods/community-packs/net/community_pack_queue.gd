@@ -7,12 +7,21 @@ signal changed
 
 const INSTALLER_SCRIPT: Script = preload("res://net/community_pack_installer.gd")
 const SETTINGS_PATH: String = "user://community_pack_settings.json"
+# GameBanana limits each connection, not the whole computer: one download ran at
+# 0.4-0.95 MB/s, four at once added up to 2.9 MB/s. Three keeps it to what a
+# browser grabbing a few files looks like.
+const MAX_PARALLEL: int = 3
 
 var _net: Node
+var _pool: Array[Node] = []
+# installer -> job id, for the ones working right now
+var _active: Dictionary = {}
+var _canceling: Dictionary = {}
+# job id -> [msec, bytes] of the last speed sample
+var _speed_sample: Dictionary = {}
+# the first slot. tests drive an installer directly through this.
 var _installer: Node
 var _jobs: Array[Dictionary] = []
-var _active_id: String = ""
-var _cancel_requested: bool = false
 var _last_online: bool = false
 var _poll_elapsed: float = 0.0
 var _last_progress_emit_msec: int = 0
@@ -27,11 +36,14 @@ func configure(net: Node) -> void:
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_settings()
-	_installer = INSTALLER_SCRIPT.new()
-	_installer.progress.connect(_on_progress)
-	_installer.finished.connect(_on_finished)
-	_installer.failed.connect(_on_failed)
-	add_child(_installer)
+	for slot: int in MAX_PARALLEL:
+		var installer: Node = INSTALLER_SCRIPT.new()
+		installer.progress.connect(_on_progress.bind(installer))
+		installer.finished.connect(_on_finished.bind(installer))
+		installer.failed.connect(_on_failed.bind(installer))
+		add_child(installer)
+		_pool.append(installer)
+	_installer = _pool[0]
 
 
 func _process(delta: float) -> void:
@@ -42,7 +54,7 @@ func _process(delta: float) -> void:
 	if online != _last_online:
 		_last_online = online
 		changed.emit()
-	if _active_id.is_empty() and (not online or _allow_online_downloads): _pump()
+	if _active.size() < _pool.size() and (not online or _allow_online_downloads): _pump()
 
 
 func allow_online_downloads() -> bool:
@@ -74,6 +86,7 @@ func enqueue(mod: Dictionary, file: Dictionary) -> String:
 		"state": "queued",
 		"received": 0,
 		"total": int(file.get("size", 0)),
+		"speed": 0.0,
 		"status": "Queued",
 		"error": "",
 		"result": {},
@@ -86,10 +99,11 @@ func enqueue(mod: Dictionary, file: Dictionary) -> String:
 func cancel(id: String) -> void:
 	var index: int = _job_index(id)
 	if index < 0: return
-	if id == _active_id:
+	var installer: Node = _installer_for(id)
+	if installer != null:
 		if str(_jobs[index].get("state", "")) != "downloading": return
-		_cancel_requested = true
-		_installer.cancel()
+		_canceling[id] = true
+		installer.cancel()
 		return
 	if str(_jobs[index].get("state", "")) == "queued":
 		_jobs[index]["state"] = "canceled"
@@ -154,21 +168,35 @@ static func job_id(mod_id: int, file_id: int) -> String:
 
 
 func _pump() -> void:
-	if not _active_id.is_empty() or _installer.is_busy(): return
 	if _net != null and _net.is_online() and not _allow_online_downloads: return
-	for index: int in _jobs.size():
-		if str(_jobs[index].get("state", "")) != "queued": continue
-		_active_id = str(_jobs[index]["id"])
-		_cancel_requested = false
+	for installer: Node in _pool:
+		if _active.has(installer) or installer.is_busy(): continue
+		var index: int = -1
+		for candidate: int in _jobs.size():
+			if str(_jobs[candidate].get("state", "")) == "queued":
+				index = candidate
+				break
+		if index < 0: return
+		var id: String = str(_jobs[index]["id"])
+		_active[installer] = id
+		_canceling.erase(id)
+		_speed_sample.erase(id)
 		_jobs[index]["state"] = "downloading"
-		_jobs[index]["status"] = "Connecting to GameBanana..."
+		_jobs[index]["status"] = "Waiting for GameBanana..."
+		_jobs[index]["speed"] = 0.0
 		changed.emit()
-		_installer.install(_jobs[index]["mod"], _jobs[index]["file"])
-		return
+		installer.install(_jobs[index]["mod"], _jobs[index]["file"])
 
 
-func _on_progress(received: int, total: int, status: String) -> void:
-	var index: int = _job_index(_active_id)
+func _installer_for(id: String) -> Node:
+	for installer: Node in _active:
+		if _active[installer] == id: return installer
+	return null
+
+
+func _on_progress(received: int, total: int, status: String, installer: Node) -> void:
+	var id: String = str(_active.get(installer, ""))
+	var index: int = _job_index(id)
 	if index < 0: return
 	var previous_state: String = str(_jobs[index].get("state", ""))
 	_jobs[index]["received"] = received
@@ -180,35 +208,54 @@ func _on_progress(received: int, total: int, status: String) -> void:
 		_jobs[index]["state"] = "installing"
 	else: _jobs[index]["state"] = "downloading"
 	var now: int = Time.get_ticks_msec()
+	_sample_speed(index, id, received, now)
 	if (str(_jobs[index].get("state", "")) != previous_state
 		or now - _last_progress_emit_msec >= 100 or received >= total):
 		_last_progress_emit_msec = now
 		changed.emit()
 
 
-func _on_finished(result: Dictionary) -> void:
-	var index: int = _job_index(_active_id)
+# once a second, smoothed, so the number doesn't jump around with every chunk.
+func _sample_speed(index: int, id: String, received: int, now: int) -> void:
+	var sample: Array = _speed_sample.get(id, [])
+	if sample.is_empty() or received < int(sample[1]):
+		_speed_sample[id] = [now, received]
+		return
+	var elapsed: int = now - int(sample[0])
+	if elapsed < 1000: return
+	var rate: float = float(received - int(sample[1])) * 1000.0 / elapsed
+	var previous: float = float(_jobs[index].get("speed", 0.0))
+	_jobs[index]["speed"] = rate if previous <= 0.0 else previous * 0.6 + rate * 0.4
+	_speed_sample[id] = [now, received]
+
+
+func _on_finished(result: Dictionary, installer: Node) -> void:
+	var id: String = str(_active.get(installer, ""))
+	_active.erase(installer)
+	_canceling.erase(id)
+	_speed_sample.erase(id)
+	var index: int = _job_index(id)
 	if index >= 0:
 		_jobs[index]["state"] = "finished"
 		_jobs[index]["status"] = "Installed"
 		_jobs[index]["received"] = int(_jobs[index].get("total", 0))
 		_jobs[index]["result"] = result.duplicate(true)
-	var completed_id: String = _active_id
-	_active_id = ""
-	_cancel_requested = false
 	if _net != null: _net.community_pack_library_changed()
 	changed.emit()
-	if not completed_id.is_empty(): _pump.call_deferred()
+	_pump.call_deferred()
 
 
-func _on_failed(message: String) -> void:
-	var index: int = _job_index(_active_id)
+func _on_failed(message: String, installer: Node) -> void:
+	var id: String = str(_active.get(installer, ""))
+	var canceled: bool = _canceling.has(id)
+	_active.erase(installer)
+	_canceling.erase(id)
+	_speed_sample.erase(id)
+	var index: int = _job_index(id)
 	if index >= 0:
-		_jobs[index]["state"] = "canceled" if _cancel_requested else "failed"
-		_jobs[index]["status"] = "Canceled" if _cancel_requested else "Download failed"
-		_jobs[index]["error"] = "" if _cancel_requested else message
-	_active_id = ""
-	_cancel_requested = false
+		_jobs[index]["state"] = "canceled" if canceled else "failed"
+		_jobs[index]["status"] = "Canceled" if canceled else "Download failed"
+		_jobs[index]["error"] = "" if canceled else message
 	changed.emit()
 	_pump.call_deferred()
 
