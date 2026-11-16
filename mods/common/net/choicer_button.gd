@@ -18,6 +18,10 @@ func _init() -> void:
  material = source.material.duplicate()
  source.free()
  custom_minimum_size.y = 40
+ # the game's own buttons join this from their scene file. picking a menu theme
+ # calls UpdatePalette on the group, so without it ours kept the old colors
+ # until a restart.
+ add_to_group("ButtonBase")
  focus_mode = Control.FOCUS_ALL
  add_child(caption)
  caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
