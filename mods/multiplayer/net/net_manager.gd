@@ -1657,6 +1657,21 @@ func can_open_lobby() -> bool:
 func open_lobby() -> void:
 	if not can_open_lobby(): return
 	log_net("opening the lobby")
+	# already in a menu: swap the page in place, the way Community packs opens,
+	# instead of CreateLobby's fade to black and menu rebuild. the music keeps
+	# going, and Back returns to the page F9 was pressed on.
+	for menu: Node in M.world.primary_capsule.get_children():
+		if not menu.scene_file_path.contains("menu_master"): continue
+		var slides: Node = menu.get_node("SlideCapsule")
+		var previous: String = slides.get_child(-1).scene_file_path if slides.get_child_count() else ""
+		if previous == "res://net/lobby.tscn": return
+		menu.NewSlide("res://net/lobby.tscn", false)
+		if not previous.is_empty():
+			var page: Node = slides.get_child(-1)
+			page.menu_data = page.menu_data.duplicate()
+			page.menu_data.back_path = previous
+			page.menu_data.assume_path = false
+		return
 	M.world.CreateLobby()
 
 
