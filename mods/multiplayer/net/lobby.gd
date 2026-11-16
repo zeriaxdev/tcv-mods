@@ -495,7 +495,14 @@ func _refresh() -> void:
 # (volume -80 dB, after the capture effect) and stops when the Online menu closes.
 
 const MIC_TEST_BUS := "TCVMicTest"
-const MIC_METER_SIZE := Vector2(8, 22)
+const MIC_METER_SIZE := Vector2(10, 24)
+# bottom to top. softer than pure traffic-light colors so it sits on the game's pale panels.
+static var MIC_GRADIENT: Gradient = (func() -> Gradient:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.6, 0.85, 1.0])
+	g.colors = PackedColorArray([Color("4fd47a"), Color("ffd84d"), Color("ff9a3d"), Color("ff5252")])
+	return g).call()
+var _mic_track: StyleBoxFlat
 var _mic_level := 0.0
 var _mic_player: AudioStreamPlayer
 var _mic_capture: AudioEffectCapture
@@ -527,13 +534,21 @@ func _draw_mic_meter(item: TreeItem, rect: Rect2) -> void:
 	var text_width: float = font.get_string_size(item.get_text(1), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var x: float = rect.position.x + player_rows.get_theme_constant("inner_item_margin_left") + text_width + 10.0
 	var box := Rect2(Vector2(x, rect.get_center().y - MIC_METER_SIZE.y / 2.0), MIC_METER_SIZE)
-	player_rows.draw_rect(box, Color(0, 0, 0, 0.15))
-	# green, then orange, then red at the top, filled from the bottom
-	for band: Array in [[0.0, 0.6, Color("4c9f4c")], [0.6, 0.85, Color("e0953a")], [0.85, 1.0, Color("d04a3c")]]:
-		var top: float = minf(_mic_level, band[1])
-		if top <= band[0]: break
-		player_rows.draw_rect(Rect2(box.position.x, box.end.y - box.size.y * top,
-			box.size.x, box.size.y * (top - band[0])), band[2])
+	if _mic_track == null:
+		_mic_track = StyleBoxFlat.new()
+		_mic_track.bg_color = Color("e4eef0")
+		_mic_track.border_color = Color("c2d6da")
+		_mic_track.set_border_width_all(1)
+		_mic_track.set_corner_radius_all(3)
+	player_rows.draw_style_box(_mic_track, box)
+	# one gradient over the whole height, filled from the bottom: green while
+	# talking normally, yellow and orange when loud, red only right at the top.
+	var inner := box.grow(-1.5)
+	var lit: int = int(round(inner.size.y * _mic_level))
+	for row: int in lit:
+		var y: float = inner.end.y - row - 1
+		player_rows.draw_rect(Rect2(inner.position.x, y, inner.size.x, 1.0),
+			MIC_GRADIENT.sample(float(row) / inner.size.y))
 
 
 func _start_mic_test() -> void:
