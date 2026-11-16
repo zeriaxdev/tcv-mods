@@ -29,7 +29,7 @@ This repository started as a fork of [Appolo's multiplayer mod](https://github.c
 
 | Feature | What it does | Needs |
 | --- | --- | --- |
-| **Community Packs** | Search, download and remove GameBanana dub packs from the main menu. ZIP, RAR and 7z packs all work, downloads keep going in the background, and slow download servers are skipped. | Always included |
+| **Community Packs** | Search, download and remove GameBanana packs from the main menu: Dub Mode, voice, player, menu, host, judges and studio packs, and compilations of them. ZIP, RAR and 7z packs all work, downloads keep going in the background, and slow download servers are skipped. | Always included |
 | **Multiplayer** | Host or join Gameshow and Dub Mode online, and share packs with the players in your lobby. Includes the fix for silent mic recordings on Windows. | Community Packs |
 | **Save as video** | **Save Dub** also turns your dub into an MP4 with your voice mixed in. The button fills up while it works, then says **Open video**. | Python 3 and FFmpeg |
 | **Translations** | Translate a dub pack's captions into your own language. Dub Mode shows your translation with the pack's original caption under it. The pack itself stays as it is. | Nothing |
@@ -98,9 +98,23 @@ In Dub Mode, the host can offer their packs to the other players before a round,
 
 Open **Community packs** from the main menu.
 
-- **Browse packs:** search GameBanana or sort the list, pick a file and press **Download**.
-- **Installed packs:** everything installed through the browser. Removing a pack asks first, and packs you installed by hand are never touched.
+- **Browse packs:** pick a pack type, search GameBanana or sort the list, pick a file and press **Download**. **Guide** opens the game's Modpack Guides for that type.
+- **Installed packs:** everything installed through the browser, of every type. Removing a pack asks first and removes every folder it installed. Packs you installed by hand are never touched.
 - **Downloads:** progress for each pack, with a **Cancel** button.
+
+Each pack goes where the game looks for its type, so it shows up on the Customize page:
+
+| Pack | Folder |
+| --- | --- |
+| Dub Mode and voice packs | `game/packs_voice` |
+| Players | `game/packs_player` |
+| Menus | `game/packs_menu` |
+| Hosts | `game/packs_host` |
+| Judges | `game/packs_judges` |
+| Studios | `game/packs_studio` |
+| Chatter | `game/packs_chatter` |
+
+The browser decides the type from the files inside the download, not from its GameBanana category, so a compilation installs all the packs it holds. Downloads that are code mods rather than packs are not installed.
 
 ### Save as video
 
@@ -164,7 +178,7 @@ Backups only ever add files. Nothing is deleted, unchanged files are skipped, an
 | macOS (built with `mac/build.py`, since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
 | Linux | `~/.local/share/YeahMaybe/ChoicerVoicer` |
 
-Inside it, `game/packs_voice` holds the dub packs, `game/recordings/dub_recordings` your saved dubs, `translations` your caption translations, and `logs` the game log.
+Inside it, `game/packs_voice` holds the dub and voice packs, the other `game/packs_*` folders the player, menu, host, judges, studio and chatter packs, `game/recordings/dub_recordings` your saved dubs, `translations` your caption translations, and `logs` the game log.
 
 ## Troubleshooting
 
@@ -180,7 +194,7 @@ This is a fan-made project. It is not made by, endorsed by or affiliated with Ye
 
 - You need your own copy of the game. Buy it on the [official itch.io page](https://yeahmaybe.itch.io/the-choicer-voicer).
 - This repository contains no game files. Share this project's code, never a game you built with it: a built game contains YeahMaybe's work.
-- Dub packs come from [GameBanana](https://gamebanana.com) and belong to their creators. Get the pack creator's permission before you publish a video made from their pack.
+- Community packs come from [GameBanana](https://gamebanana.com) and belong to their creators. Get the pack creator's permission before you publish a video made from their pack.
 
 If you are YeahMaybe and want anything changed or taken down, [open an issue](https://github.com/zeriaxdev/tcv-mods/issues) and it will be handled promptly.
 
