@@ -145,17 +145,21 @@ func _download_worker(url: String, path: String, limit: int, total: int = 0) -> 
 	var out: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if out == null: return {"error": "Could not write the download file."}
 	var switches: int = 0
+	# some files live on one mirror only, and /dl keeps sending us back to it.
+	# a mirror that was already slow once is kept the second time.
+	var slow_hosts: Dictionary = {}
 	while true:
-		var result: Dictionary = _download_attempt(url, out, limit, total, switches < MAX_MIRROR_SWITCHES)
+		var result: Dictionary = _download_attempt(url, out, limit, total, switches < MAX_MIRROR_SWITCHES, slow_hosts)
 		if result.get("switch_mirror", false):
 			switches += 1
+			slow_hosts[str(result.get("host", ""))] = true
 			continue
 		out.close()
 		return result
 	return {}
 
 
-func _download_attempt(url: String, out: FileAccess, limit: int, total: int, may_switch: bool) -> Dictionary:
+func _download_attempt(url: String, out: FileAccess, limit: int, total: int, may_switch: bool, slow_hosts: Dictionary = {}) -> Dictionary:
 	var headers: PackedStringArray = [
 		"Accept: application/octet-stream",
 		"User-Agent: TCV-Multiplayer/%s" % str(CommunityPacks.VERSION),
@@ -230,10 +234,12 @@ func _download_attempt(url: String, out: FileAccess, limit: int, total: int, may
 					var remaining: int = (total - _received) if total > 0 else limit
 					var speed: int = connection_bytes * 1000 / elapsed
 					var slow: bool = speed < SLOW_MIRROR_BYTES_PER_SECOND and remaining > MIN_REMAINING_TO_SWITCH
-					print("Community pack download: %s at %.1f MB/s%s" % [target["host"], speed / 1e6, ", trying another mirror" if slow else ""])
-					if slow:
+					var again: bool = slow_hosts.has(target["host"])
+					print("Community pack download: %s at %.1f MB/s%s" % [target["host"], speed / 1e6,
+						", trying another mirror" if slow and not again else ", keeping it, it's the one GameBanana keeps giving" if slow else ""])
+					if slow and not again:
 						client.close()
-						return {"switch_mirror": true}
+						return {"switch_mirror": true, "host": target["host"]}
 				continue
 			if checked and status in [HTTPClient.STATUS_CONNECTED, HTTPClient.STATUS_DISCONNECTED]:
 				client.close()
@@ -269,8 +275,8 @@ func install(mod: Dictionary, file: Dictionary) -> void:
 static func installability_problem(file: Dictionary) -> String:
 	var name: String = str(file.get("name", ""))
 	var extension: String = name.get_extension().to_lower()
-	if extension not in ["zip", "rar"]:
-		return "This file is not a ZIP or RAR. Only ZIP and RAR archives are supported right now."
+	if extension not in ["zip", "rar", "7z"]:
+		return "This file isn't a ZIP, RAR or 7z archive, so it can't be installed from here."
 	var size: int = int(file.get("size", 0))
 	if size <= 0: return "GameBanana did not report a valid file size."
 	if size > MAX_ARCHIVE_BYTES: return "This archive is larger than the 1 GB safety limit."
@@ -347,9 +353,9 @@ static func _validate_and_extract(
 	archive: String, mod: Dictionary, file: Dictionary, voice_root_override: String = "",
 	use_registry: bool = true
 ) -> Dictionary:
-	if not archive.get_file().contains(".rar"):
+	if not (archive.get_file().contains(".rar") or archive.get_file().contains(".7z")):
 		return _validate_and_extract_zip(archive, mod, file, voice_root_override, use_registry)
-	# RAR: the system's bsdtar (macOS /usr/bin/tar, Windows tar.exe) rewrites it as a
+	# RAR and 7z: the system's bsdtar (macOS /usr/bin/tar, Windows tar.exe) rewrites it as a
 	# ZIP without extracting anything, then the normal ZIP checks decide what installs.
 	# ponytail: no timeout on tar; a RAR bomb costs CPU time here, but the ZIP checks
 	# still refuse oversized contents before anything is written to packs_voice.
@@ -360,7 +366,7 @@ static func _validate_and_extract(
 		"@" + ProjectSettings.globalize_path(archive)], output, true)
 	if code != 0 or not FileAccess.file_exists(converted):
 		if FileAccess.file_exists(converted): DirAccess.remove_absolute(converted)
-		return {"error": "This RAR archive could not be read (%s)." % ("".join(output).strip_edges().left(160) if not output.is_empty() else "tar exit %d" % code)}
+		return {"error": "This archive could not be read (%s)." % ("".join(output).strip_edges().left(160) if not output.is_empty() else "tar exit %d" % code)}
 	var result: Dictionary = _validate_and_extract_zip(converted, mod, file, voice_root_override, use_registry)
 	DirAccess.remove_absolute(converted)
 	return result

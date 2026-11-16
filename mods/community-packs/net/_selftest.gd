@@ -98,7 +98,9 @@ func _run_community_pack_tests(failures: Array[String]) -> void:
 		failures.append("clean GameBanana ZIP was not installable")
 	if installer.installability_problem({"name": "pack.rar"}).contains("RAR"):
 		failures.append("RAR archives should be accepted")
-	if not installer.installability_problem({"name": "pack.7z"}).contains("ZIP or RAR"):
+	if installer.installability_problem({"name": "pack.7z"}).contains("7z"):
+		failures.append("7z archives should be accepted")
+	if not installer.installability_problem({"name": "pack.tar.xz"}).contains("ZIP, RAR or 7z"):
 		failures.append("unsupported archive guidance")
 	var long_name: String = "A".repeat(100) + ".rar"
 	var compact: String = load("res://net/community_pack_browser.gd")._compact_text(long_name, 40)
