@@ -233,6 +233,8 @@ func _build_ui() -> void:
 	_list.add_theme_stylebox_override("selected", _selection_box())
 	_list.add_theme_stylebox_override("selected_focus", _selection_box())
 	_list.hide_root = true
+	# every list here is flat, so the folder indent was just an empty gutter.
+	_list.add_theme_constant_override("item_margin", 0)
 	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.item_selected.connect(_on_list_selected)
