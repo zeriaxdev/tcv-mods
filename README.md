@@ -57,29 +57,26 @@ Keep the original `.exe`. When the game or these mods update, run the installer 
 
 ### macOS
 
-The game only comes out for Windows, so on a Mac you build a native app from the Windows download. You need:
+The game only comes out for Windows, so on a Mac you build a native app from the Windows download. You need Python 3: if `python3` isn't there, get it from [python.org](https://www.python.org/downloads/macos/). For **Save as video** you also need FFmpeg: `brew install ffmpeg` with [Homebrew](https://brew.sh/).
 
-- Python 3.9 or newer, and for **Save as video** FFmpeg: `brew install ffmpeg` with [Homebrew](https://brew.sh/).
-- [Godot 4.4.1 for macOS](https://github.com/godotengine/godot-builds/releases/tag/4.4.1-stable) and the **export templates** from the same page (`Godot_v4.4.1-stable_export_templates.tpz`).
-- [GDRETools 2.6.3 for macOS](https://github.com/GDRETools/gdsdecomp/releases/tag/v2.6.3).
-
-Then:
-
-1. Move Godot and GDRETools to **Applications**.
+1. Download the game's Windows ZIP from your [itch.io library](https://yeahmaybe.itch.io/the-choicer-voicer). Leave it in **Downloads**.
 2. Download `tcv-mods-<version>.zip` from the [latest release](https://github.com/zeriaxdev/tcv-mods/releases/latest) and extract it.
-3. Open Terminal in that folder and run, with your own paths:
+3. Double-click **Install on Mac.command**. If macOS blocks it, go to **System Settings → Privacy & Security** and click **Open Anyway**.
+4. Answer that you own the game. If the game's ZIP isn't in Downloads, drag it onto the installer window and press Enter.
+5. Open **The Choicer Voicer** from the **Applications** folder in your home folder and allow the microphone.
 
-```sh
-python3 mac/build.py "/path/to/the-game.zip" \
-  --godot "/Applications/Godot.app" \
-  --gdre "/Applications/Godot RE Tools.app" \
-  --templates "/path/to/Godot_v4.4.1-stable_export_templates.tpz" \
-  --output "$HOME/Applications/The Choicer Voicer.app"
-```
+The first build downloads Godot 4.4.1 and GDRETools 2.6.3 from their official GitHub releases, about 330 MB, and checks each one against a fixed SHA-256 hash. They stay in `~/Library/Caches/tcv-mods`, so later builds take under a minute. The app is signed on your Mac but not notarized by Apple.
 
-4. Open the new app in your home **Applications** folder and allow microphone access.
+Prefer Terminal? Run `python3 mac/build.py`. It takes the game's ZIP as its first argument, and `--features community-packs,save-as-video` to pick features, `--icon file.icns` for your own icon, `--output path.app`, `--replace` and `--i-own-the-game`. `--godot`, `--gdre` and `--templates` use tools you already have instead of downloading them.
 
-All features are included by default. To pick, add for example `--features community-packs,save-as-video`. Add `--icon "/path/to/icon.icns"` for a custom icon. The app is signed on your Mac but not notarized by Apple.
+### Updating
+
+There are no automatic updates. Nothing checks for a new version, downloads one, or changes the game on its own.
+
+- **New version of these mods:** download the new `tcv-mods-<version>.zip` and run its installer.
+- **New version of the game:** download it from itch.io and run the installer again.
+
+On a Mac, answer **y** to replace the app. Your old app stays until the new one is built and signed, then goes to the Trash. Your packs, dubs and settings aren't touched.
 
 ## Usage
 
@@ -175,7 +172,7 @@ Backups only ever add files. Nothing is deleted, unchanged files are skipped, an
 | System | Folder |
 | --- | --- |
 | Windows | `%APPDATA%\YeahMaybe\ChoicerVoicer` |
-| macOS (built with `mac/build.py`, since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
+| macOS (the app you built, since there's no official Mac version) | `~/Library/Application Support/YeahMaybe/ChoicerVoicer` |
 | Linux | `~/.local/share/YeahMaybe/ChoicerVoicer` |
 
 Inside it, `game/packs_voice` holds the dub and voice packs, the other `game/packs_*` folders the player, menu, host, judges, studio and chatter packs, `game/recordings/dub_recordings` your saved dubs, `translations` your caption translations, and `logs` the game log.
@@ -184,6 +181,7 @@ Inside it, `game/packs_voice` holds the dub and voice packs, the other `game/pac
 
 - **Check the game log** in the `logs` folder above. Download and video errors are written there.
 - **Can't connect:** check the port, the firewall and that everyone has the same version. Tailscale avoids most router problems.
+- **The Mac build stops:** the last lines say why. The full log is `~/Library/Caches/tcv-mods/build.log`. A checksum mismatch means a download got damaged: delete `~/Library/Caches/tcv-mods` and try again.
 - **Still stuck:** [open an issue](https://github.com/zeriaxdev/tcv-mods/issues) and attach the log. On Windows, `Zip Diagnostics.bat` packs the logs into one file for you.
 
 [Testing and compatibility](VALIDATION.md) lists what has been tested. The Windows installer has been run end to end in CrossOver, a Windows compatibility layer on macOS. Not yet tested on a real Windows PC: microphone recording, Save as video, and a match between Mac and Windows.
