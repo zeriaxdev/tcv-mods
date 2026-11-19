@@ -87,6 +87,7 @@ func _add_section() -> void:
 	if row_source == null: return
 	var section := VBoxContainer.new()
 	section.name = "TcvKeys"
+	section.theme = block.theme  # the block's own font, not the panel's bold one
 	section.add_child(HSeparator.new())
 	var heading: Label = block.get_parent().get_node_or_null("Label3")
 	heading = heading.duplicate() if heading != null else Label.new()
@@ -111,6 +112,20 @@ func _add_section() -> void:
 			row.add_child(label)
 		section.add_child(row)
 	block.add_sibling(section)
+	# Every key button is as wide as "Press a key", so capturing doesn't shift the
+	# row, and the hints line up with the Display hints above.
+	for action: String in _key_buttons:
+		var button: Control = _key_buttons[action]
+		button.text = "Press a key"
+		button.custom_minimum_size.x = button.get_combined_minimum_size().x
+	var settings: CanvasItem = _dub.get_node("Settings")
+	settings.visibility_changed.connect(func() -> void:  # measure once laid out instead of guessing widths
+		if not settings.visible: return
+		await get_tree().process_frame
+		if not is_instance_valid(section): return
+		for row: Node in section.get_children().slice(2):
+			var name_label: Control = row.get_child(1)
+			name_label.custom_minimum_size.x = maxf(0, name_label.size.x + row_source.get_child(2).global_position.x - row.get_child(2).global_position.x))
 	_show_keys()
 
 
